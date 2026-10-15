@@ -739,13 +739,56 @@ def main() -> int:
     check(r.status_code in (302, 403),
           "without an officer position the console is refused again", f"status {r.status_code}")
 
-    # ------------------------------------- 14. every tab renders, not just the ones we drove
+    # -------------------------------------------- 14. the AGPL source offer is present
+    #
+    # This instance runs a modified Friendica, so the licence requires that the people using it are
+    # offered its source. That is an obligation rather than a feature, so it is tested the same way
+    # as one - against the rendered page, not against a config value.
+    step("14. the source offer required by the AGPL is present")
+    r = admin.get(f"{BASE}/", timeout=20)
+    check("orgsuite-source-offer" in r.text, "the footer carries the source offer")
+    check("github.com/jiffythorn/social-spot" in r.text,
+          "the offer points at the published source by default",
+          "the default source address is not in the footer")
+
+    # A signed-out visitor is a user interacting with the instance too, so the offer has to reach
+    # them as well. A sign-in-gated link is not an offer to the people the clause names.
+    r = requests.get(f"{BASE}/login", timeout=20)
+    check("orgsuite-source-offer" in r.text, "the offer is visible without signing in")
+
+    # And it must be overridable, since whoever deploys this may publish their source elsewhere.
+    r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={
+            "form_security_token": token(r.text),
+            "action": "settings_save",
+            "return_tab": "settings",
+            "org_name": "Sunset Hills HOA",
+            "org_tagline": "The people who live here",
+            "credential_label": "Property address or unit number",
+            "credential_help": "",
+            "credential_type": "address",
+            "manual_review": "1",
+            "stream_first": "0",
+            "source_url": "https://example.org/our-source",
+        },
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(cfg("source_url") == "https://example.org/our-source",
+          "a configured source address is stored", f"source_url={cfg('source_url')!r}")
+    r = admin.get(f"{BASE}/", timeout=20)
+    check("https://example.org/our-source" in r.text,
+          "the footer offers the configured address instead of the default")
+
+    # ------------------------------------- 15. every tab renders, not just the ones we drove
     #
     # The tabs above are only exercised while hunting for a specific behaviour, so a tab
     # that merely *renders* had no cover. That is exactly how a broken console overview
     # shipped: it was reachable by the officer who most needs it and returned a bare 500,
     # and every check here still passed because none of them asked for it.
-    step("14. every console tab renders for the officer who owns it")
+    step("15. every console tab renders for the officer who owns it")
     tabs = [
         (""             , "the overview"),
         ("applications" , "the applications queue"),

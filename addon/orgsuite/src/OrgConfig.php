@@ -367,6 +367,39 @@ final class OrgConfig
 		return trim((string) self::get('org_tagline', ''));
 	}
 
+	/**
+	 * Where this instance's Corresponding Source can be obtained.
+	 *
+	 * The AGPL's network clause requires that people interacting with a modified version over a
+	 * network are offered its source. Publishing a repository is not the same as offering it: the
+	 * offer has to be where those people are. This default exists so an instance nobody has
+	 * configured is still compliant rather than quietly not.
+	 */
+	public const DEFAULT_SOURCE_URL = 'https://github.com/jiffythorn/social-spot';
+
+	public static function getSourceUrl(): string
+	{
+		$url = trim((string) self::get('source_url', ''));
+
+		return $url !== '' ? $url : self::DEFAULT_SOURCE_URL;
+	}
+
+	/**
+	 * Sets the source address. An empty or non-http(s) value clears the override and falls back to
+	 * the default above, so a bad value can never leave the instance without an offer at all.
+	 */
+	public static function setSourceUrl(string $url): void
+	{
+		$url = trim($url);
+
+		if ($url === '' || preg_match('#^https?://#i', $url) !== 1) {
+			self::delete('source_url');
+			return;
+		}
+
+		self::set('source_url', $url);
+	}
+
 	/** The label this organization uses for a member's identifier, e.g. "Unit number". */
 	public static function getCredentialLabel(): string
 	{

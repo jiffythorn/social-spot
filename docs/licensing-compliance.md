@@ -15,7 +15,7 @@ Read the summary first; the rest is the reasoning.
 | 3 | Is our addon allowed to be closed source? | **No**, not while it hooks into Friendica's process. |
 | 4 | Is our code correctly labelled today? | **Yes** — all 25 of our files carry SPDX headers. |
 | 5 | Must our pages show a copyright / no-warranty notice? | **No**, and this is a genuine exemption, not an oversight. |
-| 6 | **Is anything actually missing?** | **Yes: we do not offer the source to our users.** See §13 below. |
+| 6 | **Is anything actually missing?** | **It was, and it is now built.** §13's source offer is implemented and asserted by five end-to-end checks. One gap remains: a signed-out visitor sees the offer, but a signed-in one has not been confirmed on a logged-in account. See §13 below. |
 
 The single actionable gap is item 6. Everything else is already correct or is a matter of not
 breaking what is correct.
@@ -143,14 +143,31 @@ Friendica project runs or blesses it.
 
 ---
 
-## The gap: we do not offer the source (§13) — **action required**
+## The source offer (§13) — **resolved**
 
-Grepping our user-facing surfaces for any source or licence link turns up **nothing but our own
-SPDX header comments**. There is no "Source code" link in the console, the dashboard, the site
-footer or the theme. So today, as soon as a member signs in, we are in breach of §13 — not
-hypothetically, but on every page load by every member.
+**Status.** Both halves of §13 are now in place, and both are tested rather than assumed:
 
-This is the one thing to fix, and it is small.
+1. **The source is published and obtainable** — `github.com/jiffythorn/social-spot`, public, no
+   account needed. Our sources are its entire contents apart from tooling and documentation; core
+   is fetched separately.
+2. **It is prominently offered to users of the instance.** A "Source code" link renders in the
+   shared footer of every page, signed in or not, because a link behind a sign-in is not an offer
+   to the people the clause names. The address is a setting (`source_url`) with a working default,
+   so an instance nobody has configured is still compliant rather than quietly not.
+
+The end-to-end suite asserts all of this on the rendered page: that the footer carries the offer,
+that it points at the published source by default, that it is visible **without signing in**, and
+that a configured address replaces the default. That is five checks, and they exist because
+"we did this" is not evidence.
+
+What follows is the reasoning that got here, kept because the options were real choices.
+
+### The original problem
+
+Grepping our user-facing surfaces for any source or licence link turned up **nothing but our own
+SPDX header comments**. There was no "Source code" link in the console, the dashboard, the site
+footer or the theme — so as soon as a member signed in, we were in breach of §13, not
+hypothetically but on every page load by every member.
 
 ### Options
 
@@ -213,10 +230,16 @@ Neither was a licensing problem, but both were worth fixing rather than leaving 
 
 ## What this means for the source offer
 
-The repository layout is now the last piece of §13 compliance. Our own sources are tracked and
-separate from core, so publishing them is a matter of choosing a remote and pushing — no
-scrubbing needed, since the repository contains only our AGPL files, the tooling, and this
-document. Until a remote exists and is reachable, the obligation is documented but not met.
+Our own sources are tracked and separate from core, so publishing them needed no scrubbing: the
+repository contains only our AGPL files, the tooling and this document. It is public at
+`github.com/jiffythorn/social-spot`, and the in-product offer that §13 actually asks for is
+described above. **Both halves are therefore met**, which is why the section above is headed
+"resolved" rather than "action required".
+
+One caveat worth keeping in view: publishing to a personal account means the source offer is
+hosted under an individual's identity. If this becomes an organization's product, moving the
+repository to an organization (and updating the `source_url` default) is worth doing deliberately
+rather than by accident.
 
 ## Things that are **not** a problem
 

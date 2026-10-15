@@ -202,6 +202,31 @@ final class Hooks
 	 * The injected input is associated with the real form through the HTML `form` attribute,
 	 * so it submits with the form without JavaScript and without a template override.
 	 */
+	/**
+	 * Offers the Corresponding Source, which the AGPL requires of a version served over a network.
+	 *
+	 * This is a licence obligation rather than a nicety: members are users interacting with our
+	 * modified Friendica, and they must be able to obtain its source. The shared footer puts the
+	 * offer on every page, signed in or not, which is what "prominently offer" asks for - a link
+	 * buried behind a sign-in would not be an offer to the people the clause names.
+	 *
+	 * Rendering it in the footer rather than the navigation is deliberate: Friendica's themes draw
+	 * a fixed set of navigation keys, so a new entry there would simply not appear.
+	 */
+	public static function footer(string &$html): void
+	{
+		$url = OrgConfig::getSourceUrl();
+
+		if ($url === '') {
+			return;
+		}
+
+		$html .= '<div class="orgsuite-source-offer">'
+			. DI::l10n()->t('Running a modified Friendica. ')
+			. '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" rel="noopener">'
+			. DI::l10n()->t('Source code') . '</a></div>';
+	}
+
 	public static function pageContentTop(string &$html): void
 	{
 		$prefix = '';

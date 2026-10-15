@@ -75,6 +75,7 @@ const ORGSUITE_HOOKS = [
 	'nav_info'               => 'orgsuite_nav_info',
 	'head'                   => 'orgsuite_head',
 	'page_content_top'       => 'orgsuite_page_content_top',
+	'footer'                 => 'orgsuite_footer',
 	'register_post'          => 'orgsuite_register_post',
 	'register_account'       => 'orgsuite_register_account',
 	'authenticate'           => 'orgsuite_authenticate',
@@ -254,6 +255,13 @@ function orgsuite_page_content_top(&$html): void
 	}
 }
 
+function orgsuite_footer(&$html): void
+{
+	if (is_string($html)) {
+		Hooks::footer($html);
+	}
+}
+
 function orgsuite_register_post(&$data): void
 {
 	if (is_array($data)) {
@@ -293,7 +301,42 @@ function orgsuite_dbstructure_definition(&$definition): void
 
 function orgsuite_init_1(&$data): void
 {
+	orgsuite_ensure_hooks_registered();
+
 	Hooks::init($data);
+}
+
+/**
+ * Makes sure every hook this version needs is actually registered.
+ *
+ * Hook::register() persists a row in Friendica's hook table, and that table is only populated when
+ * the addon is installed. So a hook added in a later version never fires on an instance that
+ * already had the addon enabled: the addon keeps working, minus the new behaviour, with nothing to
+ * indicate anything is missing. That is not hypothetical - it is the failure mode the source-code
+ * offer below would have hit on every existing instance, silently.
+ *
+ * Comparing a fingerprint of the current hook set against the one last registered costs a single
+ * config read, and repairs the difference once. Hook::add() puts the hook into the running process
+ * too, so the current request benefits as well.
+ */
+function orgsuite_ensure_hooks_registered(): void
+{
+	if (!OrgSchema::ready()) {
+		return;
+	}
+
+	$fingerprint = md5((string) json_encode(ORGSUITE_HOOKS));
+
+	if ((string) OrgConfig::get('hooks_fingerprint', '') === $fingerprint) {
+		return;
+	}
+
+	foreach (ORGSUITE_HOOKS as $hook => $handler) {
+		Hook::register($hook, ORGSUITE_HOOK_FILE, $handler);
+		Hook::add($hook, ORGSUITE_HOOK_FILE, $handler);
+	}
+
+	OrgConfig::set('hooks_fingerprint', $fingerprint);
 }
 
 /*

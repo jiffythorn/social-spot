@@ -526,3 +526,24 @@
 	flex: 1 1 16rem;
 	margin: 0;
 }
+
+/*
+ * The source-code offer.
+ *
+ * Deliberately understated but always present: the AGPL requires that people interacting with a
+ * modified version over a network are offered its source, so this sits in the shared footer on
+ * every page of every theme. It is a licence obligation, not decoration, which is why it is not
+ * hidden behind a sign-in or tucked into an admin screen.
+ */
+.orgsuite-source-offer {
+	margin-top: var(--orgsuite-gap);
+	padding-top: var(--orgsuite-gap);
+	border-top: 1px solid var(--orgsuite-border);
+	color: var(--orgsuite-muted);
+	font-size: 0.85em;
+	text-align: center;
+}
+
+.orgsuite-source-offer a {
+	color: var(--orgsuite-accent);
+}

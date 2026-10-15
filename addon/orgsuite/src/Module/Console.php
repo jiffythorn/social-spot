@@ -1027,6 +1027,9 @@ class Console extends BaseOrgModule
 					'With this off, an applicant whose entry is on the roster is approved automatically.')
 				. $this->checkbox('stream_first', 'Show the social stream in the main navigation', OrgConfig::isStreamFirst(),
 					'Leave this off to keep the dashboard as the front page for members.')
+				. $this->textField('source_url', 'Source code address', OrgConfig::getSourceUrl(), 'text',
+					'Shown in the footer of every page. This instance runs a modified Friendica, so members '
+					. 'must be able to obtain its source. Clearing this field restores the default.')
 				. $this->hiddenField('action', 'settings_save')
 				. $this->hiddenField('return_tab', 'settings')
 				. '<p class="orgsuite-actions">' . $this->submitButton('Save settings') . '</p>'
@@ -1127,6 +1130,10 @@ class Console extends BaseOrgModule
 
 			OrgConfig::set('org_name', $this->cleanText($request, 'org_name', 191));
 			OrgConfig::set('org_tagline', $this->cleanText($request, 'org_tagline', 255));
+
+			// Set unconditionally rather than only when non-empty: clearing the field must restore the
+			// default offer, not silently keep pointing at an address the officer just removed.
+			OrgConfig::setSourceUrl($this->cleanText($request, 'source_url', 255));
 
 			$credentialLabel = $this->cleanText($request, 'credential_label', 191);
 
