@@ -1,0 +1,528 @@
+/*
+ * Copyright (C) 2026, Social Spot
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Organization Suite components.
+ *
+ * This file is the component layer: cards, tables, forms, badges and alerts. It is registered
+ * before the active theme's own skin, so an organization's theme can restyle anything here.
+ * Every colour is a custom property with a sane fallback, so the components inherit a theme's
+ * palette where one is defined and still look deliberate where none is.
+ *
+ * Loaded via DI::page()->registerStylesheet() from the addon's `head` hook.
+ */
+
+.orgsuite {
+	--orgsuite-bg: var(--background-color, #f6f7f9);
+	--orgsuite-surface: var(--content-bg, #ffffff);
+	--orgsuite-border: color-mix(in srgb, currentColor 15%, transparent);
+	--orgsuite-muted: color-mix(in srgb, currentColor 65%, transparent);
+	--orgsuite-accent: var(--link-color, #1e87c2);
+	--orgsuite-ok: #1f8a4c;
+	--orgsuite-warn: #a4610a;
+	--orgsuite-bad: #b0261f;
+
+	--orgsuite-radius: 10px;
+	--orgsuite-gap: 1rem;
+
+	max-width: 68rem;
+	margin: 0 auto;
+	color: inherit;
+	line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ page structure */
+
+.orgsuite-header {
+	margin-bottom: var(--orgsuite-gap);
+}
+
+.orgsuite-header h1 {
+	margin: 0 0 0.25rem;
+	font-size: 1.6rem;
+	line-height: 1.2;
+}
+
+.orgsuite-subtitle {
+	margin: 0;
+	color: var(--orgsuite-muted);
+}
+
+.orgsuite-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	margin: 0 0 var(--orgsuite-gap);
+	border-bottom: 1px solid var(--orgsuite-border);
+}
+
+.orgsuite-tab {
+	display: inline-block;
+	padding: 0.5rem 0.85rem;
+	border: 1px solid transparent;
+	border-bottom: none;
+	border-radius: var(--orgsuite-radius) var(--orgsuite-radius) 0 0;
+	color: inherit;
+	text-decoration: none;
+}
+
+.orgsuite-tab:hover {
+	background: var(--orgsuite-bg);
+}
+
+.orgsuite-tab--active {
+	border-color: var(--orgsuite-border);
+	background: var(--orgsuite-surface);
+	font-weight: 600;
+}
+
+.orgsuite-body > * + * {
+	margin-top: var(--orgsuite-gap);
+}
+
+.orgsuite-grid {
+	display: grid;
+	gap: var(--orgsuite-gap);
+	grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+}
+
+/* -------------------------------------------------------------------------- cards */
+
+.orgsuite-card {
+	background: var(--orgsuite-surface);
+	border: 1px solid var(--orgsuite-border);
+	border-radius: var(--orgsuite-radius);
+	padding: 1rem 1.15rem;
+}
+
+.orgsuite-card__title {
+	margin: 0 0 0.75rem;
+	font-size: 1.1rem;
+}
+
+.orgsuite-card__footer {
+	margin-top: 0.75rem;
+	padding-top: 0.75rem;
+	border-top: 1px solid var(--orgsuite-border);
+	color: var(--orgsuite-muted);
+}
+
+.orgsuite-note {
+	margin: 0.35rem 0 0;
+	color: var(--orgsuite-muted);
+	font-size: 0.94em;
+}
+
+.orgsuite-empty {
+	margin: 0;
+	padding: 1rem;
+	border: 1px dashed var(--orgsuite-border);
+	border-radius: var(--orgsuite-radius);
+	color: var(--orgsuite-muted);
+	text-align: center;
+}
+
+.orgsuite-list {
+	margin: 0;
+	padding-left: 1.1rem;
+}
+
+.orgsuite-list li + li {
+	margin-top: 0.35rem;
+}
+
+.orgsuite-actions {
+	margin: 0.75rem 0 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+/* --------------------------------------------------------------------- definitions */
+
+.orgsuite-definition {
+	display: grid;
+	grid-template-columns: minmax(8rem, auto) 1fr;
+	gap: 0.4rem 1rem;
+	margin: 0;
+}
+
+.orgsuite-definition__term {
+	font-weight: 600;
+}
+
+.orgsuite-definition__value {
+	margin: 0;
+}
+
+.orgsuite-amount {
+	margin: 0;
+	font-size: 1.8rem;
+	font-weight: 700;
+}
+
+.orgsuite-amount--due {
+	color: var(--orgsuite-bad);
+}
+
+.orgsuite-amount--clear {
+	color: var(--orgsuite-ok);
+}
+
+/* ------------------------------------------------------------------------ tables */
+
+.orgsuite-table-wrap {
+	overflow-x: auto;
+}
+
+.orgsuite-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.95em;
+}
+
+.orgsuite-table th,
+.orgsuite-table td {
+	padding: 0.5rem 0.6rem;
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid var(--orgsuite-border);
+}
+
+.orgsuite-table th {
+	font-size: 0.85em;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: var(--orgsuite-muted);
+	white-space: nowrap;
+}
+
+.orgsuite-table tr:last-child td {
+	border-bottom: none;
+}
+
+.orgsuite-cell-note {
+	font-size: 0.88em;
+	color: var(--orgsuite-muted);
+}
+
+/* ------------------------------------------------------------------------ badges */
+
+.orgsuite-badge {
+	display: inline-block;
+	padding: 0.1rem 0.5rem;
+	border-radius: 999px;
+	border: 1px solid currentColor;
+	font-size: 0.8em;
+	white-space: nowrap;
+}
+
+.orgsuite-badge--ok {
+	color: var(--orgsuite-ok);
+}
+
+.orgsuite-badge--warn {
+	color: var(--orgsuite-warn);
+}
+
+.orgsuite-badge--bad {
+	color: var(--orgsuite-bad);
+}
+
+.orgsuite-badge--muted,
+.orgsuite-badge--neutral {
+	color: var(--orgsuite-muted);
+}
+
+/* ------------------------------------------------------------------------ alerts */
+
+.orgsuite-alert {
+	padding: 0.85rem 1rem;
+	margin-bottom: var(--orgsuite-gap);
+	border-radius: var(--orgsuite-radius);
+	border-left: 4px solid var(--orgsuite-accent);
+	background: var(--orgsuite-bg);
+}
+
+.orgsuite-alert--warn {
+	border-left-color: var(--orgsuite-warn);
+}
+
+.orgsuite-alert--error {
+	border-left-color: var(--orgsuite-bad);
+}
+
+.orgsuite-alert ul {
+	margin: 0.5rem 0 0;
+	padding-left: 1.1rem;
+}
+
+.orgsuite-warn {
+	color: var(--orgsuite-warn);
+}
+
+/* ------------------------------------------------------------- announcements */
+
+.orgsuite-announcements {
+	margin-bottom: var(--orgsuite-gap);
+}
+
+.orgsuite-announcement {
+	padding: 0.85rem 1rem;
+	margin-bottom: 0.5rem;
+	border-radius: var(--orgsuite-radius);
+	border-left: 4px solid var(--orgsuite-accent);
+	background: var(--orgsuite-bg);
+}
+
+.orgsuite-announcement--important {
+	border-left-color: var(--orgsuite-warn);
+}
+
+.orgsuite-announcement--urgent {
+	border-left-color: var(--orgsuite-bad);
+}
+
+.orgsuite-announcement__title {
+	margin: 0;
+	font-weight: 700;
+}
+
+.orgsuite-announcement__body {
+	margin: 0.35rem 0 0;
+}
+
+.orgsuite-announcement__link {
+	margin: 0.35rem 0 0;
+}
+
+/* ----------------------------------------------------------------------- forms */
+
+.orgsuite-form {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.orgsuite-form--inline {
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 0.5rem;
+}
+
+.orgsuite-inline-form {
+	display: inline;
+}
+
+.orgsuite-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.orgsuite-field__label {
+	font-weight: 600;
+	font-size: 0.92em;
+}
+
+.orgsuite-field__help {
+	color: var(--orgsuite-muted);
+	font-size: 0.88em;
+}
+
+.orgsuite-field input[type="text"],
+.orgsuite-field input[type="number"],
+.orgsuite-field input[type="date"],
+.orgsuite-field input[type="url"],
+.orgsuite-field select,
+.orgsuite-field textarea {
+	width: 100%;
+	max-width: 34rem;
+	padding: 0.45rem 0.55rem;
+	border: 1px solid var(--orgsuite-border);
+	border-radius: 6px;
+	background: var(--orgsuite-surface);
+	color: inherit;
+	font: inherit;
+}
+
+.orgsuite-checkbox {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.35rem 0.5rem;
+	align-items: start;
+	padding: 0.35rem 0;
+}
+
+.orgsuite-checkbox input[type="checkbox"] {
+	margin-top: 0.25rem;
+}
+
+.orgsuite-checkbox .orgsuite-field__help {
+	grid-column: 2;
+}
+
+.orgsuite-required {
+	color: var(--orgsuite-bad);
+}
+
+/* --------------------------------------------------------------------- buttons */
+
+.orgsuite-button {
+	display: inline-block;
+	padding: 0.45rem 0.9rem;
+	border: 1px solid var(--orgsuite-border);
+	border-radius: 6px;
+	background: var(--orgsuite-bg);
+	color: inherit;
+	font: inherit;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.orgsuite-button:hover {
+	border-color: var(--orgsuite-accent);
+}
+
+.orgsuite-button--primary {
+	background: var(--orgsuite-accent);
+	border-color: var(--orgsuite-accent);
+	color: #fff;
+}
+
+.orgsuite-button--danger {
+	border-color: var(--orgsuite-bad);
+	color: var(--orgsuite-bad);
+}
+
+.orgsuite-button--secondary {
+	background: var(--orgsuite-surface);
+}
+
+/* ------------------------------------------------------------------- folders */
+
+.orgsuite-folder {
+	margin-bottom: var(--orgsuite-gap);
+	background: var(--orgsuite-surface);
+	border: 1px solid var(--orgsuite-border);
+	border-radius: var(--orgsuite-radius);
+	padding: 1rem 1.15rem;
+}
+
+.orgsuite-folder__name {
+	margin: 0;
+	font-size: 1.05rem;
+}
+
+.orgsuite-folder__description {
+	margin: 0.25rem 0 0.75rem;
+	color: var(--orgsuite-muted);
+}
+
+.orgsuite-folder__actions {
+	margin-top: 0.75rem;
+}
+
+/* ------------------------------------------- register gate (fallback injection) */
+
+.orgsuite-register-gate {
+	max-width: 40rem;
+	margin: 0 auto var(--orgsuite-gap);
+	padding: 1rem 1.15rem;
+	border: 1px solid var(--orgsuite-border);
+	border-left: 4px solid var(--orgsuite-accent);
+	border-radius: var(--orgsuite-radius);
+	background: var(--orgsuite-surface);
+}
+
+.orgsuite-credential-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.orgsuite-credential-field label {
+	font-weight: 600;
+}
+
+.orgsuite-credential-field input {
+	width: 100%;
+	padding: 0.5rem 0.6rem;
+	border: 1px solid var(--orgsuite-border);
+	border-radius: 6px;
+	background: var(--orgsuite-surface);
+	color: inherit;
+	font: inherit;
+}
+
+.orgsuite-field-help {
+	margin: 0;
+	color: var(--orgsuite-muted);
+	font-size: 0.9em;
+}
+
+/* Shown on the sign-in page to people whose application is still being checked, so a
+   failed sign-in does not read as "wrong password". */
+.orgsuite-signin-note {
+	margin: 0 0 var(--orgsuite-gap) 0;
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--orgsuite-border);
+	border-left: 4px solid var(--orgsuite-accent);
+	border-radius: var(--orgsuite-radius);
+	background: var(--orgsuite-surface);
+	line-height: 1.45;
+}
+
+.orgsuite-signin-note strong {
+	display: block;
+	margin-bottom: 0.15rem;
+}
+
+/* Positions and committees: grouped permission pickers and the collapsible editor rows. */
+.orgsuite-muted {
+	color: var(--orgsuite-muted);
+}
+
+.orgsuite-fieldset {
+	margin: 0 0 0.75rem 0;
+	padding: 0.5rem 0.75rem 0.25rem 0.75rem;
+	border: 1px solid var(--orgsuite-border);
+	border-radius: var(--orgsuite-radius);
+}
+
+.orgsuite-fieldset legend {
+	padding: 0 0.4rem;
+	font-size: 0.8rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--orgsuite-muted);
+}
+
+.orgsuite-details {
+	margin: 0;
+}
+
+.orgsuite-details > summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.orgsuite-details[open] > summary {
+	margin-bottom: 0.5rem;
+}
+
+.orgsuite-row-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: flex-end;
+	margin-top: 0.5rem;
+}
+
+.orgsuite-row-actions .orgsuite-form {
+	flex: 1 1 16rem;
+	margin: 0;
+}

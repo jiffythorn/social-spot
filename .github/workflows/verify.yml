@@ -1,0 +1,140 @@
+# Runs the whole verification gate on every push and pull request:
+#
+#   1. Friendica's own code is untouched            (tools/dev/check-core-clean.sh)
+#   2. a throwaway instance is provisioned from nothing
+#   3. the end-to-end suite drives it through the real web UI
+#
+# Both gates always run, and the job fails if either regresses. The check that actually matters
+# is #1: it is what keeps pulling the next upstream release a fast-forward instead of a merge,
+# so it is worth failing a build over.
+
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # The upstream release this project is built against. Bump it deliberately: the clean-core
+  # check is only meaningful against a specific upstream tree.
+  CORE_REPOSITORY: https://github.com/friendica/friendica.git
+  CORE_REF: stable
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    # The suite drives real HTTP against a real database, so it needs both. 20 minutes is
+    # generous for a full provision plus ~95 UI checks; if it starts timing out, something is
+    # hanging rather than slow.
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out this project
+        uses: actions/checkout@v4
+
+      - name: Install PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # 8.3 rather than 8.2: it is the version the suite was actually verified on, so CI tests
+          # what was tested rather than a closely-related version nobody has run.
+          php-version: '8.3'
+          # Two sources decide this list, and both are checked rather than guessed:
+          #
+          #   * src/Core/Installer.php (checkFunctions) - the requirements Friendica enforces:
+          #     intl, XML, curl, gd, openssl, mbstring, iconv, posix, and PDO or MySQLi.
+          #   * composer.json "require" - the ext-* packages composer REFUSES to install without.
+          #     `composer check-platform-reqs` on a machine missing them exits 2, which is what a
+          #     plain `composer install` does. gmp, apcu and imagick are here for that reason.
+          #
+          # redis is deliberately absent: Friendica does not require it and the suite passes
+          # without it.
+          extensions: mbstring, intl, pdo_mysql, mysqli, curl, openssl, xml, zip, gd, bcmath, exif, iconv, posix, gmp, apcu, imagick
+          tools: composer:v2
+          coverage: none
+
+      - name: Install MariaDB and the suite's Python dependency
+        run: |
+          sudo apt-get update
+          # python3-requests is an explicit dependency rather than an assumption about what the
+          # runner image happens to ship: tools/dev/e2e-orgsuite.py imports it, and a missing
+          # module would fail the job for a reason that has nothing to do with our code.
+          sudo apt-get install -y mariadb-server mariadb-client python3-requests
+          # The suite starts its own server from tools/dev/devdb.sh against a datadir inside the
+          # workspace, so the packaged service must not also be holding a socket.
+          sudo systemctl stop mariadb || sudo service mariadb stop || true
+
+      # Friendica core is NOT vendored into this repository. It is fetched pristine here, into
+      # the same place it occupies locally, so that the clean-core check has a real upstream tree
+      # to compare against instead of a copy of our own working directory.
+      #
+      # `git checkout` populates the tracked upstream files and deliberately leaves our own
+      # untracked paths alone (addon/ is excluded by upstream's own .gitignore, and
+      # view/theme/orgtool/ does not exist upstream at all), so our code survives with no
+      # copying or symlinking.
+      - name: Fetch Friendica core (pristine)
+        run: |
+          set -euo pipefail
+          mkdir -p friendica
+          cd friendica
+          git init -q
+          git remote add origin "$CORE_REPOSITORY"
+          git fetch -q --depth 1 origin "$CORE_REF"
+          git checkout -q -f FETCH_HEAD
+          echo "core is at $(git rev-parse --short HEAD)"
+          test -f index.php || { echo "core checkout looks wrong"; exit 1; }
+
+      # Must happen BEFORE composer runs, for two independently-found reasons:
+      #
+      #   * core's composer.json declares "classmap": ["addon/"], so the optimized autoloader
+      #     fails with 'Could not scan for classes inside "addon/"' when that directory is absent;
+      #     upstream ignores /addon, so in a pristine checkout it IS absent.
+      #   * the addon is discovered through that directory, so it has to be in place before
+      #     anything looks for it.
+      #
+      # tools/dev/verify.sh runs this again later; it is idempotent, and running it here makes the
+      # tree match the one the checks will run against.
+      - name: Link our sources into the core tree
+        run: tools/dev/link-into-core.sh
+
+      # A pristine core checkout has NO dependencies: upstream ignores /vendor (.gitignore:68), so
+      # the source tree alone cannot run. Without this step the job dies with
+      # "Failed opening required .../vendor/autoload.php", which is exactly what the local
+      # rehearsal of this workflow caught before the first push.
+      #
+      # composer.lock IS tracked upstream, so this resolves to a fixed set of versions rather than
+      # whatever is newest. The flags match the project's own `install:prod` script.
+      - name: Install Friendica's dependencies
+        run: |
+          set -euo pipefail
+          cd friendica
+          composer install -o --no-dev --no-interaction --no-progress
+          test -f vendor/autoload.php || { echo "dependencies are not installed"; exit 1; }
+
+      # Our sources live at the repository root, not inside friendica/: core is fetched and is
+      # not part of this repository, so anything inside it would be invisible to git. They are
+      # linked into the core tree by tools/dev/link-into-core.sh, which verify.sh runs first.
+      - name: Show what our side adds
+        run: |
+          echo "our addon: $(find addon/orgsuite -type f | wc -l) files"
+          echo "our theme: $(find theme/orgtool -type f | wc -l) files"
+
+      # One command, because a CI job that reimplements the local steps drifts from them.
+      # verify.sh links our sources into core, checks core is untouched, provisions a throwaway
+      # instance on its own port and database, runs the suite against it, and cleans up.
+      #
+      # Run through bash explicitly: whether the exec bit survives a given checkout is not worth
+      # a failed build over.
+      - name: Verify (core clean + end-to-end suite)
+        run: bash tools/dev/verify.sh
+
+      # On failure the assertions alone rarely explain anything; the server log usually names
+      # the actual cause. Uploaded only when something went wrong, to keep runs cheap.
+      - name: Upload the instance log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-instance-log
+          path: .local/ci/verify-*.log
+          if-no-files-found: ignore

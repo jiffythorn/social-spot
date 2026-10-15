@@ -1,0 +1,103 @@
+/*
+ * Copyright (C) 2026, Social Spot
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * orgtool skin.
+ *
+ * This is the top layer: Frio paints the site, the Organization Suite addon supplies the
+ * components, and this file sets the tone an organization expects from a management tool
+ * rather than a social network. It is intentionally short — the less a theme does, the less
+ * there is to reconcile when upstream Friendica is re-merged.
+ *
+ * Registered from orgtool_init(), after Frio and after the addon component stylesheet.
+ */
+
+:root {
+	--orgtool-max-width: 72rem;
+	--orgtool-radius: 10px;
+}
+
+/* ------------------------------------------------------------------ typography */
+
+body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+		Arial, "Noto Sans", sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------- calmer navigation */
+
+/*
+ * An HOA board does not need the federation vocabulary. The addon already removes those
+ * navigation entries from the server side when the instance is not "stream first"; these
+ * rules only tidy what remains so the navigation reads like a small intranet.
+ */
+
+#topbar-first,
+#nav-apps-link {
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.nav > li > a {
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+/* Reduce visual noise from the composer on non-stream pages. */
+.orgtool-calm .jot-nav-tabs,
+.orgtool-calm .profile-edit-side-link,
+.orgtool-calm .contact-block-hover {
+	display: none !important;
+}
+
+/* ------------------------------------------------------------- org components */
+
+/*
+ * Give the Organization Suite pages a little more room and a softer surface than the default
+ * content area, so a treasurer's worklist reads as a document rather than a feed.
+ */
+
+.orgsuite-page {
+	padding: 0.5rem 0 2rem;
+}
+
+.orgsuite-card,
+.orgsuite-folder {
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.orgsuite-header h1 {
+	font-size: 1.75rem;
+}
+
+/* The sign-up gate should look like part of the form, not a warning. */
+.orgsuite-register-gate {
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.orgsuite-register-gate .orgsuite-credential-field input {
+	font-size: 1.05rem;
+}
+
+/* --------------------------------------------------------------- responsive */
+
+@media (max-width: 640px) {
+	.orgsuite-definition {
+		grid-template-columns: 1fr;
+		gap: 0.15rem;
+	}
+
+	.orgsuite-definition__term {
+		margin-top: 0.5rem;
+	}
+
+	.orgsuite-form--inline {
+		flex-direction: column;
+		align-items: stretch;
+	}
+}

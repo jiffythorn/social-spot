@@ -1,0 +1,26 @@
+# Minimal OpenSSL configuration for local development and verification.
+#
+# Why this exists: on some hosts (this one included) the default OpenSSL config is a broken
+# symlink — /usr/lib/ssl/openssl.cnf -> /etc/ssl/openssl.cnf, with the target absent. PHP then
+# fails every openssl_pkey_new() call with "configuration file routines::No such file", which
+# breaks Friendica's node key and per-user key generation.
+#
+# Pointing OPENSSL_CONF at this file fixes that without touching the system:
+#
+#     export OPENSSL_CONF="$(pwd)/tools/dev/openssl.cnf"
+#
+# tools/dev/dev-env.sh does this for you.
+
+[ req ]
+distinguished_name = req_distinguished_name
+prompt             = no
+default_bits       = 4096
+
+[ req_distinguished_name ]
+CN = Friendica Development
+
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+default_md = sha256

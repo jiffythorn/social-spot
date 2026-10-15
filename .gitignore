@@ -1,0 +1,22 @@
+# Friendica core is FETCHED, never committed.
+#
+# Three reasons this matters, and they are not style preferences:
+#   * core is upstream's tree, not ours — the only thing we want to know about it is "does it
+#     still match upstream", which is a question you can only ask of a real checkout;
+#   * committing it would make every upstream release a merge of thousands of files we do not
+#     own, instead of a fast-forward;
+#   * it is what lets tools/dev/check-core-clean.sh be a meaningful check rather than a
+#     comparison of our tree against itself.
+/friendica/
+
+# Local runtime state: the project-local MariaDB datadir, server logs, pid files, and the
+# generated configuration of any instance provisioned by tools/dev/instance.sh.
+/.local/
+
+# Tool state, not project code.
+/.freebuff/
+
+# Editor and OS noise.
+*.swp
+*~
+.DS_Store
