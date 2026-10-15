@@ -15,7 +15,7 @@ Read the summary first; the rest is the reasoning.
 | 3 | Is our addon allowed to be closed source? | **No**, not while it hooks into Friendica's process. |
 | 4 | Is our code correctly labelled today? | **Yes** — all 25 of our files carry SPDX headers. |
 | 5 | Must our pages show a copyright / no-warranty notice? | **No**, and this is a genuine exemption, not an oversight. |
-| 6 | **Is anything actually missing?** | **It was, and it is now built.** §13's source offer is implemented and asserted by five end-to-end checks. One gap remains: a signed-out visitor sees the offer, but a signed-in one has not been confirmed on a logged-in account. See §13 below. |
+| 6 | **Is anything actually missing?** | **It was, and it is now built.** §13's source offer is implemented and asserted by six end-to-end checks, covering signed-in and signed-out visitors alike. See §13 below. |
 
 The single actionable gap is item 6. Everything else is already correct or is a matter of not
 breaking what is correct.
@@ -156,9 +156,15 @@ Friendica project runs or blesses it.
    so an instance nobody has configured is still compliant rather than quietly not.
 
 The end-to-end suite asserts all of this on the rendered page: that the footer carries the offer,
-that it points at the published source by default, that it is visible **without signing in**, and
-that a configured address replaces the default. That is five checks, and they exist because
-"we did this" is not evidence.
+that it points at the published source by default, that it is visible **without signing in**, that
+the page carrying it really was rendered for a **signed-in** session, and that a configured
+address replaces the default. That is six checks, and they exist because "we did this" is not
+evidence.
+
+The signed-in one is not redundant. The footer is shared, so every page carries the offer —
+including the public ones, which means the first two checks would still pass if the session driving
+them had quietly lapsed. Asserting that the sign-out link is present on the very same response is
+what makes "the offer reaches a signed-in member" a measurement instead of an assumption.
 
 What follows is the reasoning that got here, kept because the options were real choices.
 

@@ -751,6 +751,14 @@ def main() -> int:
           "the offer points at the published source by default",
           "the default source address is not in the footer")
 
+    # Both of those would also hold if this response had been served to a signed-out visitor: the
+    # public page carries the same footer. Since the obligation names *all* remote users, assert
+    # that this particular page really was rendered for a signed-in session - the sign-out link
+    # only exists in the signed-in navigation.
+    check('id="nav-logout-link"' in r.text,
+          "the offer reaches a signed-in member, not only a signed-out render",
+          "the page carrying the offer was not served to a signed-in session")
+
     # A signed-out visitor is a user interacting with the instance too, so the offer has to reach
     # them as well. A sign-in-gated link is not an offer to the people the clause names.
     r = requests.get(f"{BASE}/login", timeout=20)

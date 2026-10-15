@@ -16,6 +16,10 @@
 # Tool state, not project code.
 /.freebuff/
 
+# Python bytecode, e.g. from compiling the end-to-end suite to check it before running it.
+__pycache__/
+*.pyc
+
 # Editor and OS noise.
 *.swp
 *~
