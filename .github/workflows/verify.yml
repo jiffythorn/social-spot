@@ -23,7 +23,11 @@ env:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest. The runner image is part of the environment this gate was
+    # verified against, and `ubuntu-latest` starts migrating to Ubuntu 26 on 2026-10-19 - which
+    # would silently change PHP, MariaDB and package versions underneath a green build. Moving is
+    # then a deliberate change with its own verification, not a surprise on someone's push.
+    runs-on: ubuntu-24.04
 
     # The suite drives real HTTP against a real database, so it needs both. 20 minutes is
     # generous for a full provision plus ~95 UI checks; if it starts timing out, something is
@@ -31,8 +35,10 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      # v5 rather than v4: the runner warns that v4 targets Node.js 20, which is deprecated and
+      # already being force-migrated to Node.js 24.
       - name: Check out this project
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install PHP
         uses: shivammathur/setup-php@v2
