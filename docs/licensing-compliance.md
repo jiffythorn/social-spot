@@ -285,7 +285,32 @@ tools/dev/dryrun-ci.sh
 ```
 
 All five were run against this tree and pass as written: 23 PHP files lint clean, the SPDX sweep
-prints nothing, and both `verify.sh` and `dryrun-ci.sh` report 95 checks passing with the
+prints nothing, and both `verify.sh` and `dryrun-ci.sh` report 101 checks passing with the
 core-clean gate green.
 
 If any of these start failing, this document is out of date before the licence question is.
+
+## How the gate is enforced
+
+Checks only matter if a failing one cannot reach `main`. So `main` is a protected branch: a pull
+request is required, and the `verify` check must pass before that pull request can merge. The check
+is pinned to the GitHub Actions app, so no other app can satisfy it by publishing a check of the
+same name, and force-pushes and branch deletion are refused. This matters here because third-party
+review apps do post checks to this repository; none of them can block or satisfy the gate.
+
+One deliberate exception: **administrators are not bound by the rule**, so a direct push to `main`
+still works when a fix cannot wait for a pull request. A bypassed red build is therefore possible,
+but not silent — the push triggers the same gate and reports its result against the branch.
+
+```bash
+# the current policy, in the form it is actually stored
+gh api repos/jiffythorn/social-spot/branches/main/protection --jq \
+  '{required: .required_status_checks.contexts, pull_request: (.required_pull_request_reviews != null),
+    enforce_admins: .enforce_admins.enabled}'
+```
+
+Confirmed on 2026-10-15 by observing a throwaway pull request rather than trusting the setting:
+while `verify` was still running, the pull request reported `BLOCKED` and `MERGEABLE` — blocked by
+the unreported check, not by a conflict — and it became `CLEAN` only once the check passed. The
+same observation confirmed that `on: pull_request` runs the real suite, which is a prerequisite:
+a required check that never reports on a pull request would block every merge indefinitely.
