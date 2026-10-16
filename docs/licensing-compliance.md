@@ -242,6 +242,11 @@ repository contains only our AGPL files, the tooling and this document. It is pu
 described above. **Both halves are therefore met**, which is why the section above is headed
 "resolved" rather than "action required".
 
+A root `LICENSE` carries the full AGPL v3 text, so the grant is visible to anyone who opens the
+repository instead of having to be inferred from the `SPDX-License-Identifier` headers in each
+file — GitHub detects the licence from that file and labels the project accordingly. The
+end-to-end and packaging checks do not depend on it; it exists for the human reading the page.
+
 One caveat worth keeping in view: publishing to a personal account means the source offer is
 hosted under an individual's identity. If this becomes an organization's product, moving the
 repository to an organization (and updating the `source_url` default) is worth doing deliberately
@@ -273,8 +278,10 @@ tools/dev/check-core-clean.sh
 # because find does not follow a directory symlink given as its start point
 find addon theme -name '*.php' -print0 | xargs -0 -n1 php -l
 
-# every file we own is labelled: lists only the ones that are NOT, so silence means pass
-grep -rL 'SPDX-License-Identifier' addon theme
+# every file we own is labelled: lists only the ones that are NOT, so silence means pass.
+# Restricted to code files because theme/orgtool/images/ now holds generated PNGs -
+# binary artwork cannot carry a text tag, and matching it only made the sweep noisy.
+grep -rL --include='*.php' --include='*.js' --include='*.css' 'SPDX-License-Identifier' addon theme
 
 # and the whole gate end to end, on a throwaway instance
 tools/dev/verify.sh
@@ -284,7 +291,7 @@ tools/dev/verify.sh
 tools/dev/dryrun-ci.sh
 ```
 
-All five were run against this tree and pass as written: 23 PHP files lint clean, the SPDX sweep
+All five were run against this tree and pass as written: 26 PHP files lint clean, the SPDX sweep
 prints nothing, and both `verify.sh` and `dryrun-ci.sh` report 147 checks passing with the
 core-clean gate green.
 
