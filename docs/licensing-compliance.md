@@ -285,7 +285,7 @@ tools/dev/dryrun-ci.sh
 ```
 
 All five were run against this tree and pass as written: 23 PHP files lint clean, the SPDX sweep
-prints nothing, and both `verify.sh` and `dryrun-ci.sh` report 101 checks passing with the
+prints nothing, and both `verify.sh` and `dryrun-ci.sh` report 120 checks passing with the
 core-clean gate green.
 
 If any of these start failing, this document is out of date before the licence question is.

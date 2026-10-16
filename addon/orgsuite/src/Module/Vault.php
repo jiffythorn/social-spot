@@ -53,6 +53,11 @@ class Vault extends BaseOrgModule
 	{
 		$this->requireLogin();
 
+		if (!OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_VAULT)) {
+			DI::sysmsg()->addNotice('The document library is switched off. Turn it on in Organization settings to use it.');
+			$this->baseUrl->redirect('orgsuite');
+		}
+
 		$action = $this->cleanText($request, 'action', 32);
 
 		switch ($action) {
@@ -440,6 +445,12 @@ class Vault extends BaseOrgModule
 	 */
 	private function download(array $request): void
 	{
+		// The switch is checked before anything else so a disabled library answers 404
+		// without revealing, through a 403, that a document with this id exists.
+		if (!OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_VAULT)) {
+			$this->httpError(404, 'Document not found');
+		}
+
 		$id = (int) ($this->parameters['id'] ?? $request['id'] ?? 0);
 
 		$document = VaultRepository::documentById($id);
@@ -461,10 +472,6 @@ class Vault extends BaseOrgModule
 				'uid'      => $this->localUid(),
 			]);
 			$this->httpError(403, 'You do not have access to this document');
-		}
-
-		if (!OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_VAULT)) {
-			$this->httpError(404, 'Document not found');
 		}
 
 		$data = VaultRepository::retrieve((string) $document['storage_ref']);

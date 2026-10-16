@@ -484,6 +484,7 @@ def main() -> int:
     check("feature_vault" in settings, "the settings page exposes the feature switches")
     check("feature_dues" in settings, "the dues switch is exposed")
     check("feature_gated_registration" in settings, "the gated-registration switch is exposed")
+    check("feature_committees" in settings, "the committees switch is exposed")
 
     before = member.get(f"{BASE}/orgsuite/documents", timeout=20)
     check(before.status_code == 200, "the vault is reachable while switched on")
@@ -492,7 +493,7 @@ def main() -> int:
     # Submit the features form with everything on except the vault.
     feature_payload = {"form_security_token": stoken, "action": "settings_save", "features_only": "1", "return_tab": "settings"}
     for feature in [
-        "dashboard", "members", "gated_registration", "roster", "dues", "announcements",
+        "dashboard", "members", "gated_registration", "roster", "dues", "announcements", "committees",
     ]:
         feature_payload[f"feature_{feature}"] = "1"
     admin.post(f"{BASE}/orgsuite/console", data=feature_payload, allow_redirects=True, timeout=20)
@@ -503,11 +504,17 @@ def main() -> int:
           "the vault page stops working when switched off", f"status {after.status_code}")
     r = member.get(f"{BASE}/orgsuite", timeout=20)
     check("/orgsuite/documents" not in r.text, "the vault link is removed from a member's navigation")
+    # A download must answer 404 while the library is off, not leak existence via a 403.
+    if doc:
+        doc_id_off = doc.split("\t")[0]
+        r = member.get(f"{BASE}/orgsuite/documents/download/{doc_id_off}", allow_redirects=False, timeout=20)
+        check(r.status_code == 404, "a download answers 404 while the vault is switched off",
+              f"status {r.status_code}")
 
     # Switch it back on so the instance is left usable.
     r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
     feature_payload = {"form_security_token": token(r.text), "action": "settings_save", "features_only": "1", "return_tab": "settings"}
-    for feature in ["dashboard", "members", "gated_registration", "roster", "vault", "dues", "announcements"]:
+    for feature in ["dashboard", "members", "gated_registration", "roster", "vault", "dues", "announcements", "committees"]:
         feature_payload[f"feature_{feature}"] = "1"
     admin.post(f"{BASE}/orgsuite/console", data=feature_payload, allow_redirects=True, timeout=20)
     r = member.get(f"{BASE}/orgsuite/documents", timeout=20)
@@ -738,6 +745,148 @@ def main() -> int:
     r = member.get(f"{BASE}/orgsuite/console", allow_redirects=False, timeout=20)
     check(r.status_code in (302, 403),
           "without an officer position the console is refused again", f"status {r.status_code}")
+
+    # --------------------------------- 13b. every switch gates its pages and its writes
+    #
+    # Hiding a tab is not the same as switching a feature off: a crafted POST can still
+    # name the action directly, and a bookmarked tab URL bypasses the tab bar entirely.
+    # Each switch below is turned off on its own (everything else stays on), then the tab
+    # must explain it is off, a direct write must change nothing, and the tab must vanish
+    # from the console. The security token for the crafted write comes from the settings
+    # page, because the disabled tab itself renders no form - using its (absent) token
+    # would fail on CSRF instead of on the feature guard and prove nothing.
+    step("13b. every feature switch gates its pages and refuses its writes")
+    ALL_FEATURES = ["dashboard", "members", "gated_registration", "roster", "vault", "dues", "announcements", "committees"]
+
+    def settings_token() -> str:
+        r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+        return token(r.text) or ""
+
+    def set_features(on: list) -> None:
+        payload = {"form_security_token": settings_token(), "action": "settings_save",
+                   "features_only": "1", "return_tab": "settings"}
+        for feature in ALL_FEATURES:
+            if feature in on:
+                payload[f"feature_{feature}"] = "1"
+        admin.post(f"{BASE}/orgsuite/console", data=payload, allow_redirects=True, timeout=20)
+
+    def all_on() -> None:
+        set_features(ALL_FEATURES)
+
+    def without(feature: str) -> list:
+        return [f for f in ALL_FEATURES if f != feature]
+
+    # Committees: a club that does not use them switches them off.
+    set_features(without("committees"))
+    r = admin.get(f"{BASE}/orgsuite/console?tab=committees", timeout=20)
+    check("switched off" in visible_text(r.text).lower(), "the committees tab explains it is switched off")
+    committees_before = sql("SELECT COUNT(*) FROM orgsuite_committee;")
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={"form_security_token": settings_token(), "action": "committee_create",
+              "return_tab": "committees", "name": f"Should not exist {RUN[-4:]}",
+              "description": "crafted while off", "visibility": "members"},
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(sql("SELECT COUNT(*) FROM orgsuite_committee;") == committees_before,
+          "a committee cannot be created while committees are switched off")
+    r = admin.get(f"{BASE}/orgsuite/console", timeout=20)
+    check("tab=committees" not in r.text, "the committees tab is hidden while switched off")
+    all_on()
+    r = admin.get(f"{BASE}/orgsuite/console?tab=committees", timeout=20)
+    check(r.status_code == 200 and "switched off" not in visible_text(r.text).lower(),
+          "switching committees back on restores the tab")
+
+    # Dues: the charge and payment writes must change nothing while off.
+    set_features(without("dues"))
+    r = admin.get(f"{BASE}/orgsuite/console?tab=dues", timeout=20)
+    check("switched off" in visible_text(r.text).lower(), "the dues tab explains it is switched off")
+    charges_before = sql(f"SELECT COUNT(*) FROM orgsuite_charge WHERE uid={uid};")
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={"form_security_token": settings_token(), "action": "charge_create",
+              "charge_amount": "999.99", "charge_target": str(uid),
+              "charge_period": "crafted while off", "charge_description": "crafted while off",
+              "charge_due": "2026-12-31", "return_tab": "dues"},
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(sql(f"SELECT COUNT(*) FROM orgsuite_charge WHERE uid={uid};") == charges_before,
+          "a charge cannot be raised while dues are switched off")
+    all_on()
+
+    # Roster: entries must not be added while off.
+    set_features(without("roster"))
+    r = admin.get(f"{BASE}/orgsuite/console?tab=roster", timeout=20)
+    check("switched off" in visible_text(r.text).lower(), "the roster tab explains it is switched off")
+    roster_before = sql("SELECT COUNT(*) FROM orgsuite_roster;")
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={"form_security_token": settings_token(), "action": "roster_add",
+              "roster_credential": f"CRAFTED-{RUN[-4:]}", "roster_type": "membership_id",
+              "roster_label": "crafted", "roster_household": "crafted",
+              "return_tab": "roster"},
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(sql("SELECT COUNT(*) FROM orgsuite_roster;") == roster_before,
+          "a roster entry cannot be added while the roster is switched off")
+    all_on()
+
+    # Announcements: nothing may be published while off.
+    set_features(without("announcements"))
+    r = admin.get(f"{BASE}/orgsuite/console?tab=announcements", timeout=20)
+    check("switched off" in visible_text(r.text).lower(), "the announcements tab explains it is switched off")
+    announcements_before = sql("SELECT COUNT(*) FROM orgsuite_announcement;")
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={"form_security_token": settings_token(), "action": "announcement_create",
+              "announcement_title": f"Crafted while off {RUN[-4:]}", "announcement_body": "crafted",
+              "announcement_level": "info", "announcement_visibility": "members",
+              "announcement_ends": "", "announcement_link": "", "return_tab": "announcements"},
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(sql("SELECT COUNT(*) FROM orgsuite_announcement;") == announcements_before,
+          "an announcement cannot be published while announcements are switched off")
+    all_on()
+
+    # Members: the directory route and the member editor must both stop.
+    set_features(without("members"))
+    r = admin.get(f"{BASE}/orgsuite/console?tab=members", timeout=20)
+    check("switched off" in visible_text(r.text).lower(), "the members tab explains it is switched off")
+    r = member.get(f"{BASE}/orgsuite/directory", allow_redirects=False, timeout=20)
+    check(r.status_code in (302, 303),
+          "the member directory redirects while member records are switched off",
+          f"status {r.status_code}")
+    standing_before = sql(f"SELECT status FROM orgsuite_member WHERE uid={uid};")
+    r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={"form_security_token": token(r.text), "action": "member_update",
+              "return_tab": "members", "member_uid": str(uid), "status": "suspended",
+              "unit": "14", "household": "Test household", "directory": "1"},
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(sql(f"SELECT status FROM orgsuite_member WHERE uid={uid};") == standing_before,
+          "a member record cannot be changed while member records are switched off")
+    all_on()
+    r = member.get(f"{BASE}/orgsuite/directory", timeout=20)
+    check(r.status_code == 200, "switching member records back on restores the directory")
+
+    # Gated registration: the sign-up page must stop asking for a credential while off.
+    set_features(without("gated_registration"))
+    r = admin.get(f"{BASE}/orgsuite/console?tab=applications", timeout=20)
+    check("switched off" in visible_text(r.text).lower(), "the applications queue explains it is switched off")
+    r = requests.get(f"{BASE}/register", timeout=20)
+    check('name="orgsuite_credential"' not in r.text,
+          "sign-up stops asking for a credential while gated registration is off")
+    all_on()
+    r = requests.get(f"{BASE}/register", timeout=20)
+    check('name="orgsuite_credential"' in r.text,
+          "switching gated registration back on restores the sign-up field")
 
     # -------------------------------------------- 14. the AGPL source offer is present
     #

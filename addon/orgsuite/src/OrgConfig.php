@@ -60,6 +60,7 @@ final class OrgConfig
 	public const FEATURE_VAULT               = 'vault';
 	public const FEATURE_DUES                = 'dues';
 	public const FEATURE_ANNOUNCEMENTS       = 'announcements';
+	public const FEATURE_COMMITTEES          = 'committees';
 
 	/**
 	 * The feature catalog.
@@ -149,7 +150,25 @@ final class OrgConfig
 				self::PROFILE_COMMUNITY => true,
 			],
 		],
+		self::FEATURE_COMMITTEES => [
+			'label'       => 'Committees',
+			'description' => 'Working groups with chairs and membership lists, such as grounds, events or architectural review. Turn it off if your organization does not use committees.',
+			'requires'    => [self::FEATURE_MEMBERS],
+			'defaults'    => [
+				self::PROFILE_HOA       => true,
+				self::PROFILE_CLUB      => true,
+				self::PROFILE_NONPROFIT => true,
+				self::PROFILE_COMMUNITY => false,
+			],
+		],
 	];
+
+	/**
+	 * Positions are deliberately NOT a feature switch. They are the permission backbone:
+	 * officer detection consults the positions system, so switching positions off would lock
+	 * everybody out of the console including the people meant to switch it back on. An
+	 * organization that does not need custom positions simply uses the built-in ones.
+	 */
 
 	/** Roles an officer can assign to a member, ordered from least to most privileged. */
 	public const ROLES = ['member', 'resident', 'owner', 'board', 'treasurer', 'president'];

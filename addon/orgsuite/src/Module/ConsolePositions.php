@@ -235,6 +235,10 @@ trait ConsolePositions
 
 	private function committeesTab(): string
 	{
+		if (!OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_COMMITTEES)) {
+			return $this->emptyState('Committees are switched off. Turn them on in Organization settings.');
+		}
+
 		$canManage = $this->can(Permissions::MANAGE_COMMITTEES);
 
 		$html = '<div class="orgsuite-alert orgsuite-alert--warn"><strong>Committees</strong>'

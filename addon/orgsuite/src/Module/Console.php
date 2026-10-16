@@ -60,38 +60,49 @@ class Console extends BaseOrgModule
 
 		switch ($action) {
 			case 'approve_application':
+				$this->requireFeature(OrgConfig::FEATURE_GATED_REGISTRATION);
 				$this->decideApplication($request, true);
 				break;
 			case 'reject_application':
+				$this->requireFeature(OrgConfig::FEATURE_GATED_REGISTRATION);
 				$this->decideApplication($request, false);
 				break;
 			case 'member_update':
+				$this->requireFeature(OrgConfig::FEATURE_MEMBERS);
 				$this->updateMember($request);
 				break;
 			case 'roster_import':
+				$this->requireFeature(OrgConfig::FEATURE_ROSTER);
 				$this->importRoster($request);
 				break;
 			case 'roster_add':
+				$this->requireFeature(OrgConfig::FEATURE_ROSTER);
 				$this->addRosterEntry($request);
 				break;
 			case 'roster_delete':
+				$this->requireFeature(OrgConfig::FEATURE_ROSTER);
 				RosterRepository::delete($this->cleanInt($request, 'id'));
 				$this->audit('roster.delete', OrgSchema::TABLE_ROSTER, $this->cleanInt($request, 'id'));
 				DI::sysmsg()->addInfo('Roster entry removed.');
 				break;
 			case 'charge_create':
+				$this->requireFeature(OrgConfig::FEATURE_DUES);
 				$this->createCharge($request);
 				break;
 			case 'payment_record':
+				$this->requireFeature(OrgConfig::FEATURE_DUES);
 				$this->recordPayment($request);
 				break;
 			case 'charge_status':
+				$this->requireFeature(OrgConfig::FEATURE_DUES);
 				$this->setChargeStatus($request);
 				break;
 			case 'announcement_create':
+				$this->requireFeature(OrgConfig::FEATURE_ANNOUNCEMENTS);
 				$this->createAnnouncement($request);
 				break;
 			case 'announcement_toggle':
+				$this->requireFeature(OrgConfig::FEATURE_ANNOUNCEMENTS);
 				AnnouncementRepository::setActive(
 					$this->cleanInt($request, 'id'),
 					$this->cleanBool($request, 'active')
@@ -99,6 +110,7 @@ class Console extends BaseOrgModule
 				DI::sysmsg()->addInfo('Announcement updated.');
 				break;
 			case 'announcement_delete':
+				$this->requireFeature(OrgConfig::FEATURE_ANNOUNCEMENTS);
 				AnnouncementRepository::delete($this->cleanInt($request, 'id'));
 				$this->audit('announcement.delete', OrgSchema::TABLE_ANNOUNCEMENT, $this->cleanInt($request, 'id'));
 				DI::sysmsg()->addInfo('Announcement deleted.');
@@ -116,18 +128,23 @@ class Console extends BaseOrgModule
 				$this->defaultRole($request);
 				break;
 			case 'committee_create':
+				$this->requireFeature(OrgConfig::FEATURE_COMMITTEES);
 				$this->createCommittee($request);
 				break;
 			case 'committee_save':
+				$this->requireFeature(OrgConfig::FEATURE_COMMITTEES);
 				$this->saveCommittee($request);
 				break;
 			case 'committee_seat':
+				$this->requireFeature(OrgConfig::FEATURE_COMMITTEES);
 				$this->seatOnCommittee($request);
 				break;
 			case 'committee_unseat':
+				$this->requireFeature(OrgConfig::FEATURE_COMMITTEES);
 				$this->unseatFromCommittee($request);
 				break;
 			case 'committee_delete':
+				$this->requireFeature(OrgConfig::FEATURE_COMMITTEES);
 				$this->deleteCommittee($request);
 				break;
 			case 'settings_save':
@@ -202,6 +219,28 @@ class Console extends BaseOrgModule
 		];
 	}
 
+	/**
+	 * Refuses a write to a switched-off feature.
+	 *
+	 * The tab bar hides disabled features, but a crafted POST can still name the action
+	 * directly, so every mutating action checks its switch first. Redirects with an
+	 * explanation when the feature is off, mirroring requirePermission().
+	 */
+	private function requireFeature(string $feature): void
+	{
+		if (OrgConfig::isFeatureEnabled($feature)) {
+			return;
+		}
+
+		DI::logger()->notice('OrgSuite: write to disabled feature refused', [
+			'feature' => $feature,
+			'uid'     => $this->localUid(),
+		]);
+
+		DI::sysmsg()->addNotice('That feature is switched off. Turn it on in Organization settings to use it.');
+		$this->baseUrl->redirect('orgsuite/console');
+	}
+
 	/** Whether the reader may open a tab at all. */
 	private function mayOpenTab(string $tab): bool
 	{
@@ -221,7 +260,7 @@ class Console extends BaseOrgModule
 			$tabs['positions'] = ['label' => 'Positions', 'url' => 'orgsuite/console?tab=positions'];
 		}
 
-		if ($this->can(Permissions::MANAGE_COMMITTEES)) {
+		if (OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_COMMITTEES) && $this->mayOpenTab('committees')) {
 			$tabs['committees'] = ['label' => 'Committees', 'url' => 'orgsuite/console?tab=committees'];
 		}
 
@@ -282,7 +321,9 @@ class Console extends BaseOrgModule
 			$memberRows[] = ['Former members', (string) $counts['former']];
 		}
 
-		$body .= $this->card('Membership', $this->table(['Status', 'Members'], $memberRows));
+		if (OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_MEMBERS)) {
+			$body .= $this->card('Membership', $this->table(['Status', 'Members'], $memberRows));
+		}
 
 		if (OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_DUES)) {
 			$summary = DuesRepository::summary();
@@ -446,6 +487,10 @@ class Console extends BaseOrgModule
 
 	private function membersTab(): string
 	{
+		if (!OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_MEMBERS)) {
+			return $this->emptyState('Member records are switched off. Turn them on in Organization settings.');
+		}
+
 		$rows = [];
 
 		foreach (MemberRepository::listAll() as $member) {
