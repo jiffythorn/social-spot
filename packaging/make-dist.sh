@@ -70,10 +70,15 @@ for need in \
   has "$need" || die "missing from the zip: $need"
 done
 
-for banned in "$NAME/friendica/" "$NAME/.local/" "$NAME/packaging/.env" "$NAME/.git/"; do
+# Directory prefixes match by prefix; the file matches a whole line, so that
+# packaging/.env.example (which MUST ship) is not mistaken for packaging/.env
+# (which must never ship).
+for banned in "$NAME/friendica/" "$NAME/.local/" "$NAME/.git/"; do
   printf '%s' "$list" | grep -q "^$banned" \
     && die "must never ship, but present in the zip: $banned"
 done
+printf '%s' "$list" | grep -qx "$NAME/packaging/.env" \
+  && die "must never ship, but present in the zip: $NAME/packaging/.env"
 
 sha256sum "$OUT" > "$OUT.sha256"
 say "wrote $OUT ($(du -h "$OUT" | cut -f1)) + .sha256"
