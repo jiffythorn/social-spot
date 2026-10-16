@@ -13,6 +13,12 @@
 # generated configuration of any instance provisioned by tools/dev/instance.sh.
 /.local/
 
+# The installer's answers hold passwords - the example template is committed, real ones never are.
+packaging/.env
+
+# Release zips are built artifacts (packaging/make-dist.sh), not sources.
+/dist/
+
 # Tool state, not project code.
 /.freebuff/
 

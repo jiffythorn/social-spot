@@ -1,0 +1,17 @@
+# Routes every request through Friendica's front controller.
+#
+# Friendica resolves the route from a `pagename` query parameter - see
+# tools/dev/router.php, which documents this contract and emulates it for the
+# PHP built-in server. This file is the production half of that contract: keep
+# the two in agreement or pages render wrong with no error.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Existing files (theme assets, images, static files) are served directly.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Everything else becomes the front controller's route. QSA preserves any
+    # real query string alongside the injected pagename.
+    RewriteRule ^(.*)$ index.php?pagename=$1 [QSA,L]
+</IfModule>

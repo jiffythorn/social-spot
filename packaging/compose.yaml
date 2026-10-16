@@ -1,0 +1,72 @@
+# The Social Spot server: web app, database, and background-job worker.
+#
+# Used two ways:
+#   * by hand:  copy .env.example to .env, edit it, then `docker compose up -d --build`;
+#   * by the thin installers (install.sh / install.ps1), which write .env for you.
+#
+# Layout notes:
+#   * the app image is built from the repository root (it needs addon/ and theme/),
+#     fetching pristine Friendica core at build time - see packaging/Dockerfile;
+#   * the application container is stateless: configuration is regenerated from the
+#     environment on every boot and organization life lives in the database, so the
+#     only volume that matters is db-data. Back up the database, and you have
+#     everything;
+#   * the worker runs the same image with a different command (`console daemon`,
+#     core's persistent background-job runner since 2026.01) - no second image.
+
+name: social-spot
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in packaging/.env}
+      MARIADB_DATABASE: ${DB_NAME:-socialspot}
+      MARIADB_USER: ${DB_USER:-socialspot}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in packaging/.env}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-p$${MARIADB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: ..
+      dockerfile: packaging/Dockerfile
+      args:
+        CORE_REF: ${CORE_REF:-stable}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+
+  worker:
+    build:
+      context: ..
+      dockerfile: packaging/Dockerfile
+      args:
+        CORE_REF: ${CORE_REF:-stable}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["worker"]
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+
+volumes:
+  db-data:
