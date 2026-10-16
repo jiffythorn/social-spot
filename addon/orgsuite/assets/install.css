@@ -1,0 +1,63 @@
+/*
+ * Copyright (C) 2026, Social Spot
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * The add-to-home-screen control (Hooks::installWidget() + assets/install.js).
+ *
+ * Kept deliberately quiet: it sits above real content on every organization page, so it
+ * reads as a hint rather than a banner. It is not a primary call to action and must not
+ * look like one.
+ */
+
+.orgsuite-install {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0 0 1rem;
+}
+
+.orgsuite-install__button {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.4rem 0.75rem;
+	font-size: 0.9rem;
+	line-height: 1.3;
+	text-transform: none;
+	letter-spacing: normal;
+	white-space: normal;
+}
+
+.orgsuite-install__icon {
+	width: 24px;
+	height: 24px;
+	border-radius: 6px;
+	flex: 0 0 auto;
+	/* The icon is decorative - the label says what the button does - so it must not
+	 * add anything to a screen reader's output. */
+	pointer-events: none;
+}
+
+.orgsuite-install-help {
+	flex: 1 0 100%;
+	padding: 0.75rem 0.9rem;
+	margin-top: 0.35rem;
+	background: rgba(0, 0, 0, 0.03);
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	border-radius: var(--orgtool-radius, 10px);
+}
+
+.orgsuite-install-help[hidden] {
+	display: none;
+}
+
+.orgsuite-install-steps {
+	margin: 0.5rem 0 0.75rem;
+	padding-left: 1.25rem;
+}
+
+.orgsuite-install-steps li {
+	margin: 0.25rem 0;
+}

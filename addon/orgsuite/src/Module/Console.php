@@ -23,6 +23,7 @@ namespace Friendica\Addon\OrgSuite\Module;
 
 use Friendica\Addon\OrgSuite\AnnouncementRepository;
 use Friendica\Addon\OrgSuite\AuditLog;
+use Friendica\Addon\OrgSuite\Branding;
 use Friendica\Addon\OrgSuite\DuesRepository;
 use Friendica\Addon\OrgSuite\Gate;
 use Friendica\Addon\OrgSuite\MemberRepository;
@@ -149,6 +150,14 @@ class Console extends BaseOrgModule
 				break;
 			case 'settings_save':
 				$this->saveSettings($request);
+				break;
+			case 'icon_save':
+				$this->requirePermission(Permissions::MANAGE_SETTINGS);
+				$this->saveIcon();
+				break;
+			case 'icon_remove':
+				$this->requirePermission(Permissions::MANAGE_SETTINGS);
+				$this->removeIcon();
 				break;
 			case 'schema_update':
 				$this->repairSchema();
@@ -1081,6 +1090,7 @@ class Console extends BaseOrgModule
 				. '</form>'
 		);
 
+		$html .= $this->brandingCard();
 		$html .= $this->featureFlagsCard();
 		$html .= $this->maintenanceCard();
 
@@ -1136,6 +1146,108 @@ class Console extends BaseOrgModule
 				. '<p class="orgsuite-actions">' . $this->submitButton('Save features') . '</p>'
 				. '</form>'
 		);
+	}
+
+	/**
+	 * The site icon: what members see in their browser tab and on their home screen.
+	 *
+	 * Governed by "change organization settings" rather than by site administration. The
+	 * two core values an upload writes (`system.touch_icon` and `system.shortcut_icon`)
+	 * point at this addon's own routes, so replacing the artwork is the organization
+	 * changing its own face, not administering the machine it is hosted on - and whoever
+	 * grants the permission to edit the organization name and wording is granting this too.
+	 * A site administrator holds it without the tick, as everywhere else.
+	 */
+	private function brandingCard(): string
+	{
+		$preview = '<img class="orgsuite-branding__preview" src="orgsuite/icon?size=192" '
+			. 'width="96" height="96" alt="Current site icon" />';
+
+		$source = Branding::hasCustomIcon()
+			? 'Using the logo uploaded here.'
+			: 'Using the built-in site icon - upload a logo to replace it.';
+
+		$body = $preview
+			. '<p class="orgsuite-note">' . Text::h($source) . ' This is what members see in '
+			. 'their browser tab and when they add this site to their phone\'s home screen.</p>'
+			. $this->formStart('orgsuite/console', self::TOKEN)
+			. $this->hiddenField('action', 'icon_save')
+			. $this->hiddenField('return_tab', 'settings')
+			. '<label class="orgsuite-field">'
+			. '<span class="orgsuite-field__label">Upload a logo <span class="orgsuite-required">*</span></span>'
+			. '<input type="file" name="org_icon" accept="image/*" required />'
+			. '<span class="orgsuite-field__help">A PNG or JPEG up to 4 MB. A square image works best; '
+			. 'it is resized for every place the icon appears.</span>'
+			. '</label>'
+			. '<p class="orgsuite-actions">' . $this->submitButton('Use this logo') . '</p>'
+			. '</form>';
+
+		if (Branding::hasCustomIcon()) {
+			$body .= '<div class="orgsuite-row-actions">'
+				. $this->actionForm(
+					'orgsuite/console',
+					self::TOKEN,
+					['action' => 'icon_remove', 'return_tab' => 'settings'],
+					'Remove - go back to the built-in icon',
+					'danger',
+					'Replace your uploaded logo with the built-in site icon?'
+				)
+				. '</div>';
+		}
+
+		return $this->card('Site icon', $body);
+	}
+
+	/**
+	 * Reads the posted logo and hands it to Branding, which validates it properly: what the
+	 * bytes are, not what the file is called or what the browser claimed.
+	 */
+	private function saveIcon(): void
+	{
+		$file = $_FILES['org_icon'] ?? null;
+
+		if (!is_array($file) || !isset($file['error']) || (int) $file['error'] !== UPLOAD_ERR_OK) {
+			$errorCode = is_array($file) ? (int) ($file['error'] ?? -1) : -1;
+			$message = $errorCode === UPLOAD_ERR_INI_SIZE || $errorCode === UPLOAD_ERR_FORM_SIZE
+				? 'That image is larger than this server accepts. Resize it (a square under 4 MB is plenty) and try again.'
+				: 'No image was received. Choose a file and try again.';
+
+			DI::sysmsg()->addNotice($message);
+
+			return;
+		}
+
+		$data = @file_get_contents((string) $file['tmp_name']);
+
+		$error = null;
+
+		if (!Branding::saveUpload($data === false ? '' : $data, $this->localUid(), $error)) {
+			DI::sysmsg()->addNotice($error ?? 'That image could not be used.');
+
+			return;
+		}
+
+		// Who changed the site's face, and when: the same reason every other settings write
+		// is recorded, and the reason it matters now is that more than one person can.
+		$this->audit('settings.icon.save', OrgConfig::CATEGORY, 0);
+
+		DI::sysmsg()->addInfo('Site icon updated. It may take a few minutes to refresh on '
+			. 'phones that already had the site saved.');
+	}
+
+	private function removeIcon(): void
+	{
+		if (!Branding::hasCustomIcon()) {
+			DI::sysmsg()->addNotice('There is no uploaded logo to remove.');
+
+			return;
+		}
+
+		Branding::remove($this->localUid());
+
+		$this->audit('settings.icon.remove', OrgConfig::CATEGORY, 0);
+
+		DI::sysmsg()->addInfo('Site icon reset to the built-in one.');
 	}
 
 	private function maintenanceCard(): string
@@ -1230,6 +1342,12 @@ class Console extends BaseOrgModule
 				// features are on, so cached decisions have to go.
 				Gate::resetTemplateCache();
 				OrgSchema::resetReadyCache();
+
+				// Friendica caches the whole route table for a day and only recomputes it when
+				// the addon list changes - but our routes are added *per feature*, so a switch
+				// flipped here would otherwise take up to 24 hours to actually do anything.
+				// Clearing the key costs one recompute on the next request.
+				DI::cache()->delete('routerDispatchData');
 			}
 
 			if (OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_GATED_REGISTRATION)) {

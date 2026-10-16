@@ -165,7 +165,7 @@ final class Permissions
 				self::MANAGE_SETTINGS => [
 					'scope'       => self::SCOPE_ORGANIZATION,
 					'label'       => 'Change organization settings',
-					'description' => 'Change the organization name, wording and which features are switched on.',
+					'description' => 'Change the organization name, wording and the site icon.',
 				],
 				self::VIEW_AUDIT => [
 					'scope'       => self::SCOPE_ORGANIZATION,

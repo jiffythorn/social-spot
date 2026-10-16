@@ -21,6 +21,39 @@ member's normal account. Upstream keeps the compatibility lists:
 Setup for a member is: install the app, enter the site address as the server,
 sign in. That is the whole integration, and it costs us nothing per member.
 
+## Installing the site itself: the icon on the home screen
+
+There is a second route to a phone icon that involves **no third-party app
+whatsoever**: the site is installable in its own right.
+
+Any signed-in organization page offers a button — **Add {your organization}
+to your home screen**:
+
+- **iPhone / iPad:** the button opens the exact Share → Add to Home Screen
+  steps, because Safari deliberately exposes no programmatic install prompt.
+- **Android / Chrome:** the button installs directly, with the site's own icon,
+  when Chrome considers the site installable.
+- **Anything else:** the button falls back to the browser's own menu steps, so
+  it is never a dead end. "Not now" is remembered per browser.
+
+Once installed, that icon *is* the member's app: it opens straight to the
+dashboard — dues, documents, directory and announcements — in its own window
+with no address bar. The artwork it shows is whatever is configured under
+**Organization settings → Site icon**: the built-in mark, or a logo uploaded by
+anyone holding **Change organization settings** — a site administrator always
+does — resized automatically for every place it appears.
+
+On Android the launcher may crop that icon to a circle, rounded square or
+squircle of its own choosing, so the site serves a second, *maskable* version of
+the artwork — background running to every edge, the mark drawn inside the safe
+central circle — and points the manifest at it for Android to use. Without it
+the crop can cut straight through the logo. Whichever artwork is configured,
+both versions are produced from it automatically.
+
+So the honest answer to "is there an app?" has two halves, and both are free:
+the site installs itself to the home screen for everything organizational, and
+a third-party client covers the social feed for members who want it.
+
 ## The boundary that must stay clear: apps cover the social side only
 
 Those apps talk to Friendica core — feed, posts, notifications. They do **not**

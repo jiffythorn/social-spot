@@ -135,6 +135,10 @@ first_boot() {
   log "activating the organization skin"
   console config system theme orgtool >/dev/null 2>&1 || true
 
+  # Core's icon configuration is wired by the addon itself (Hooks::wireSiteIcons) rather
+  # than here: it must only replace values that were never customised, which is a
+  # decision that has to be made against live config, not at a fixed point in a script.
+
   log "ready at $BASE_URL (admin $ADMIN_NICK)"
 }
 
@@ -157,6 +161,13 @@ provision() {
     write_local_config yes
     first_boot
   fi
+
+  # NOTE: nothing has to be done here to make new routes visible. Since 2026.10 the
+  # addon compares its own route revision against the stored one on every request and
+  # rebuilds Friendica's cached route table itself (see Hooks::invalidateRoutesAfterUpgrade).
+  # An earlier version of this script tried `console cache set routerDispatchData 0`,
+  # which always failed - core refuses to overwrite an array-typed key - and only looked
+  # like it worked because the failure was guarded.
 }
 
 mode="${1:-app}"

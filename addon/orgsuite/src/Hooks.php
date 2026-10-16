@@ -33,11 +33,29 @@ use FastRoute\RouteCollector;
 use Friendica\Addon\OrgSuite\Module\Console;
 use Friendica\Addon\OrgSuite\Module\Dashboard;
 use Friendica\Addon\OrgSuite\Module\Directory;
+use Friendica\Addon\OrgSuite\Module\Icon;
+use Friendica\Addon\OrgSuite\Module\Manifest;
 use Friendica\Addon\OrgSuite\Module\Vault;
 use Friendica\DI;
 
 final class Hooks
 {
+	/**
+	 * Revision of the routes @see self::routeCollection() declares.
+	 *
+	 * Friendica caches the entire route table for a day and only recomputes it when the
+	 * addon *list* changes. Adding a route to an already-enabled addon is therefore
+	 * invisible to a running instance for up to 24 hours - which showed up on a live
+	 * instance as the manifest advertising an icon URL that answered 404, and as a
+	 * feature switch appearing to do nothing until the next day.
+	 *
+	 * Bump this whenever routeCollection() gains or loses a route. The next request then
+	 * rebuilds the table itself, so it works on every path into an installation (Docker
+	 * upgrade, developer's server, hand-patched copy) instead of depending on a shell
+	 * script that has to remember to do it.
+	 */
+	private const ROUTES_REVISION = '2026.10.16.2';
+
 	/**
 	 * Registers this addon's front-end routes.
 	 *
@@ -60,6 +78,21 @@ final class Hooks
 		}
 
 		$collector->addRoute(['GET', 'POST'], '/orgsuite/console', Console::class);
+
+		// Always registered, and deliberately not behind a feature switch: core's own
+		// head template and manifest module reference this URL from configuration, so a
+		// switch turned off could otherwise leave every browser asking for an icon that
+		// no longer answers - on every page load, site-wide.
+		$collector->addRoute(['GET'], '/orgsuite/icon', Icon::class);
+		$collector->addRoute(['GET'], '/orgsuite/favicon', Icon::class);
+
+		// The Android adaptive icon and the manifest that advertises it, always on for
+		// the same reason: core's manifest module cannot name a `purpose: "maskable"`
+		// asset, and it cannot be *overridden* either, because FastRoute refuses a
+		// duplicate static route - so the manifest the page reads is ours, pointed at by
+		// Hooks::pointManifestAtOurs(), and a link to it must never answer 404.
+		$collector->addRoute(['GET'], '/' . Branding::MASKABLE_URL, Icon::class);
+		$collector->addRoute(['GET'], '/' . Branding::MANIFEST_URL, Manifest::class);
 	}
 
 	/**
@@ -193,6 +226,11 @@ final class Hooks
 	public static function head(string &$html): void
 	{
 		DI::page()->registerStylesheet('addon/orgsuite/assets/orgsuite.css');
+		DI::page()->registerStylesheet('addon/orgsuite/assets/install.css');
+		// The add-to-home-screen control needs to know whether the browser offered a native
+		// install prompt, which only script can observe; loaded in the footer so it runs
+		// after the button it acts on is in the document.
+		DI::page()->registerFooterScript('addon/orgsuite/assets/install.js');
 	}
 
 	/**
@@ -232,6 +270,7 @@ final class Hooks
 		$prefix = '';
 
 		$prefix .= self::announcementBanner();
+		$prefix .= self::installWidget();
 
 		if (Gate::isEnabled() && self::isRegisterPage() && !Gate::themeRendersField()) {
 			$prefix .= '<div class="orgsuite-register-gate">' . Gate::fieldHtml(true) . '</div>';
@@ -240,6 +279,63 @@ final class Hooks
 		$prefix .= self::signInExpectation();
 
 		$html = $prefix . $html;
+	}
+
+	/**
+	 * Whether the reader is inside the organization pages rather than on the social site.
+	 */
+	private static function isOrgsuitePage(): bool
+	{
+		$queryString = trim((string) DI::args()->getQueryString(), '/');
+
+		return $queryString === 'orgsuite'
+			|| str_starts_with($queryString, 'orgsuite?')
+			|| str_starts_with($queryString, 'orgsuite/');
+	}
+
+	/**
+	 * The "add this site to your home screen" control.
+	 *
+	 * A browser can install a site on its own - the manifest and icons are already wired
+	 * up - but nobody finds that unaided. This puts a button where members already are, and
+	 * works three ways because no single mechanism covers every phone:
+	 *
+	 *  - Chromium (Android, desktop): captures the native install prompt, so one tap
+	 *    installs with our icon;
+	 *  - iOS Safari: cannot be prompted programmatically, so the button opens the exact
+	 *    Share -> Add to Home Screen steps, which is what WebKit documents as the only path;
+	 *  - anything else: generic instructions, so the button is never a dead end.
+	 *
+	 * "Not now" is remembered per browser, because a control that reappears on every page
+	 * after being declined is worse than no control at all.
+	 */
+	private static function installWidget(): string
+	{
+		if ((int) DI::userSession()->getLocalUserId() <= 0 || !self::isOrgsuitePage()) {
+			return '';
+		}
+
+		$name = OrgConfig::getOrgName();
+		$esc  = Text::h($name);
+
+		return '<div class="orgsuite-install" id="orgsuite-install">'
+			. '<button type="button" class="orgsuite-button orgsuite-install__button" id="orgsuite-install-button">'
+			. '<img class="orgsuite-install__icon" src="orgsuite/favicon" width="24" height="24" alt="" />'
+			. '<span class="orgsuite-install__label">Add ' . $esc . ' to your home screen</span>'
+			. '</button>'
+			. '<div class="orgsuite-install-help" id="orgsuite-install-help" hidden>'
+			. '<strong>Add ' . $esc . ' to your home screen</strong>'
+			. '<p class="orgsuite-note">Once it is on your home screen it opens like any other app '
+			. 'and shows ' . $esc . '\'s own icon, with no address bar in the way.</p>'
+			. '<ol class="orgsuite-install-steps" data-install-steps>'
+			. '<li>Tap your browser\'s share or menu button.</li>'
+			. '<li>Choose <strong>Add to Home Screen</strong> or <strong>Install app</strong>.</li>'
+			. '<li>Tap <strong>Add</strong>.</li>'
+			. '</ol>'
+			. '<p><button type="button" class="orgsuite-button orgsuite-button--secondary" '
+			. 'id="orgsuite-install-dismiss">Not now</button></p>'
+			. '</div>'
+			. '</div>';
 	}
 
 	private static function announcementBanner(): string
@@ -398,6 +494,160 @@ final class Hooks
 	}
 
 	/**
+	 * Rebuilds Friendica's cached route table after this addon changes shape.
+	 *
+	 * Reads one already-cached config value per request and does nothing at all once the
+	 * stored revision matches - so the steady-state cost is nil, and the failure mode is
+	 * a stale route table rather than a broken page.
+	 */
+	private static function invalidateRoutesAfterUpgrade(): void
+	{
+		static $checked = false;
+
+		if ($checked) {
+			return;
+		}
+
+		$checked = true;
+
+		try {
+			if (OrgConfig::get('routes_revision', '') === self::ROUTES_REVISION) {
+				return;
+			}
+
+			DI::logger()->info('OrgSuite: route list changed, rebuilding the route table', [
+				'revision' => self::ROUTES_REVISION,
+			]);
+
+			DI::cache()->delete('routerDispatchData');
+			OrgConfig::set('routes_revision', self::ROUTES_REVISION);
+		} catch (\Throwable $e) {
+			// Stale routes are survivable; a page that throws is not. Log and carry on.
+			DI::logger()->debug('OrgSuite: could not refresh the route cache', ['exception' => $e]);
+		}
+	}
+
+	/**
+	 * Points core's icon configuration at this addon's routes.
+	 *
+	 * Friendica decides which artwork a page advertises from `system.touch_icon` (the iOS
+	 * home-screen icon and the manifest) and `system.shortcut_icon` (the tab). Leaving them
+	 * unset means every browser shows members Friendica's own logo, which is precisely the
+	 * thing this feature exists to prevent - so the wiring cannot depend on somebody
+	 * visiting a settings page first.
+	 *
+	 * It runs from `init_1` instead of from provisioning for two reasons. It has to work on
+	 * every path into an installation (fresh, upgraded, dev, container), and it must never
+	 * overwrite an icon an administrator deliberately chose in core's own settings: only
+	 * the unset value and Friendica's stock defaults are replaced. Once the values read as
+	 * ours, this does nothing at all - one config read per request, no writes.
+	 */
+	private static function wireSiteIcons(): void
+	{
+		static $attempted = false;
+
+		if ($attempted) {
+			return;
+		}
+
+		$attempted = true;
+
+		try {
+			$icon = (string) DI::config()->get('system', 'touch_icon');
+
+			if ($icon === '' || $icon === 'images/friendica-192.png') {
+				DI::config()->set('system', 'touch_icon', Branding::ICON_URL);
+			}
+
+			$favicon = (string) DI::config()->get('system', 'shortcut_icon');
+
+			if ($favicon === '' || $favicon === 'images/friendica.svg') {
+				DI::config()->set('system', 'shortcut_icon', Branding::FAVICON_URL);
+			}
+		} catch (\Throwable $e) {
+			// A page must never fail because its icon could not be configured: the site is
+			// perfectly usable with a default icon, so log and carry on.
+			DI::logger()->debug('OrgSuite: could not wire the site icon', ['exception' => $e]);
+		}
+	}
+
+	/**
+	 * Points the page's `<link rel="manifest">` at this addon's manifest.
+	 *
+	 * The link has to change because core cannot express `purpose: "maskable"`
+	 * (@see Branding::MANIFEST_URL), and there is no supported way to change it:
+	 * the `head` hook is dispatched *before* head.tpl is prepended to the head markup,
+	 * so the link does not exist yet when it runs, and the manifest route itself cannot
+	 * be re-registered because FastRoute rejects a duplicate static route. The response
+	 * is the only place that sees the finished document, so the rewrite happens there.
+	 *
+	 * One buffer and one attribute swap, skipped outright for anything that does not
+	 * advertise a manifest (JSON endpoints, images) and for CLI, and core's link stays
+	 * in place underneath - should this ever miss, members get core's manifest rather
+	 * than none.
+	 */
+	private static function pointManifestAtOurs(): void
+	{
+		static $started = false;
+
+		if ($started || PHP_SAPI === 'cli') {
+			return;
+		}
+
+		$started = true;
+
+		ob_start(static function (string $buffer): string {
+			if ($buffer === ''
+				|| (strpos($buffer, 'rel="manifest"') === false && strpos($buffer, "rel='manifest'") === false)) {
+				return $buffer;
+			}
+
+			try {
+				return self::rewriteManifestHref($buffer);
+			} catch (\Throwable $e) {
+				// A page must never fail because its manifest link could not be rewritten:
+				// core's manifest still answers, so log and hand the buffer back untouched.
+				DI::logger()->debug('OrgSuite: could not rewrite the manifest link', ['exception' => $e]);
+
+				return $buffer;
+			}
+		});
+	}
+
+	/**
+	 * Swaps the href of every manifest link in a finished document.
+	 *
+	 * Both attribute orders are handled because themes write them both ways, and a tag
+	 * without an href is left alone rather than risking malformed markup: a manifest
+	 * link that points nowhere was already broken.
+	 */
+	private static function rewriteManifestHref(string $html): string
+	{
+		$target = DI::baseUrl() . '/' . Branding::MANIFEST_URL;
+		$href   = 'href="' . htmlspecialchars($target, ENT_QUOTES, 'UTF-8') . '"';
+
+		$rewritten = preg_replace_callback(
+			'~<link\b[^>]*\brel\s*=\s*(["\'])manifest\1[^>]*>~i',
+			static function (array $match) use ($href): string {
+				$tag = $match[0];
+
+				if (!preg_match('~\bhref\s*=\s*(["\']).*?\1~i', $tag)) {
+					return $tag;
+				}
+
+				$changed = preg_replace('~\bhref\s*=\s*(["\']).*?\1~i', $href, $tag, 1);
+
+				return $changed !== null && $changed !== '' ? $changed : $tag;
+			},
+			$html,
+			-1,
+			$count
+		);
+
+		return $rewritten ?? $html;
+	}
+
+	/**
 	 * Makes the organization overview the landing page.
 	 *
 	 * Only the bare site root is redirected, and only for signed-in members, so stream
@@ -406,6 +656,10 @@ final class Hooks
 	 */
 	public static function init(&$data): void
 	{
+		self::pointManifestAtOurs();
+		self::invalidateRoutesAfterUpgrade();
+		self::wireSiteIcons();
+
 		if (!OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_DASHBOARD) || OrgConfig::isStreamFirst()) {
 			return;
 		}

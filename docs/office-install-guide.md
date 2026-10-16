@@ -142,6 +142,23 @@ first (the address check and your approval live only there), and dues,
 documents, and the directory always stay on the site itself, never in the
 app. Full details: `docs/mobile-apps.md`.
 
+**The easier route, which needs no app at all:** on any page of your site there
+is a button that says **Add [your organization] to your home screen**. A member
+taps it — on an iPhone it shows the Share → Add to Home Screen steps; on
+Android it installs straight away — and the site appears on their home screen
+with your icon, opening straight to the dashboard. Tell them this one first:
+all of the organization's business works that way.
+
+### Uploading your own logo
+
+The icon members see — in their browser tab, and on their home screen — starts
+as a built-in mark. To use your own: open the **Console**, **Organization
+settings**, **Site icon**, choose a square image (PNG or JPEG, under 4 MB) and
+click **Use this logo**. It is resized for every place it appears; nothing to
+upload twice and no file to replace. **Remove** puts the built-in mark back.
+Anyone whose position includes **Change organization settings** can do this —
+it does not need the person who set up the server.
+
 ## Living with it
 
 - **After restarting the computer**, open Docker Desktop first and wait for
