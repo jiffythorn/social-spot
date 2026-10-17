@@ -1,0 +1,8 @@
+# Sales material lives in its own directory (Social-Spot-sales/) and must never
+# ship in the distributable zip. packaging/make-dist.sh builds the zip with
+# `git archive HEAD`, which honours export-ignore here.
+# (dist/ itself is already gitignored; friendica/ and .local/ likewise.)
+# Both lines: the first excludes the directory at archive time, the second
+# matches every file under it (verifiable with `git check-attr`).
+/Social-Spot-sales/ export-ignore
+Social-Spot-sales/** export-ignore
