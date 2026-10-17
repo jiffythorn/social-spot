@@ -28,6 +28,7 @@ use Friendica\Addon\OrgSuite\DuesRepository;
 use Friendica\Addon\OrgSuite\Gate;
 use Friendica\Addon\OrgSuite\MemberRepository;
 use Friendica\Addon\OrgSuite\OrgConfig;
+use Friendica\Addon\OrgSuite\OrgMail;
 use Friendica\Addon\OrgSuite\OrgSchema;
 use Friendica\Addon\OrgSuite\Permissions;
 use Friendica\Addon\OrgSuite\RoleRepository;
@@ -150,6 +151,14 @@ class Console extends BaseOrgModule
 				break;
 			case 'settings_save':
 				$this->saveSettings($request);
+				break;
+			case 'mail_save':
+				$this->requirePermission(Permissions::MANAGE_SETTINGS);
+				$this->saveMail($request);
+				break;
+			case 'mail_test':
+				$this->requirePermission(Permissions::MANAGE_SETTINGS);
+				$this->sendMailTest($request);
 				break;
 			case 'icon_save':
 				$this->requirePermission(Permissions::MANAGE_SETTINGS);
@@ -381,6 +390,10 @@ class Console extends BaseOrgModule
 
 		if (OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_ROSTER) && RosterRepository::count() === 0) {
 			$warnings[] = 'The roster feature is on but the list is empty, so every application has to be checked by hand.';
+		}
+
+		if (!OrgMail::isConfigured()) {
+			$warnings[] = 'Email is not configured: approval notices and password resets cannot reach members. Fill in the relay under Organization settings -> Email.';
 		}
 
 		if (!$this->isSiteAdmin() && !OrgConfig::isFeatureEnabled(OrgConfig::FEATURE_GATED_REGISTRATION)) {
@@ -1091,10 +1104,134 @@ class Console extends BaseOrgModule
 		);
 
 		$html .= $this->brandingCard();
+		$html .= $this->mailCard();
 		$html .= $this->featureFlagsCard();
 		$html .= $this->maintenanceCard();
 
 		return $html;
+	}
+
+	/**
+	 * Outgoing email: the relay this club sends password resets and approval
+	 * notices through.
+	 *
+	 * The address is only known once a club adopts the instance, so it cannot be
+	 * part of the installer - an officer fills it in here. Governed by "change
+	 * organization settings", the same permission as the organization name.
+	 */
+	private function mailCard(): string
+	{
+		$settings = OrgMail::get();
+
+		$status = $settings['configured']
+			? $this->badge('Configured', 'ok')
+			: $this->badge('Not configured', 'warn');
+
+		$passwordHelp = $settings['has_password']
+			? 'A password is saved. Leave this blank to keep it, or enter a new one to replace it.'
+			: 'For Gmail or Outlook this is an app password you create in that account, not the login password.';
+
+		$body = '<p class="orgsuite-note">' . $status . ' Password resets and "your account is approved" '
+			. 'notices go through the mailbox below. Until this works, members must be told out-of-band when '
+			. 'they are approved, and forgotten passwords cannot be recovered.</p>'
+			. $this->formStart('orgsuite/console', self::TOKEN)
+			. $this->textField('mail_from', 'Send mail as', $settings['from'], 'email',
+				'The address members reply to, e.g. treasurer@example.org.')
+			. $this->textField('mail_host', 'Mail server', $settings['host'], 'text',
+				'e.g. smtp.gmail.com, smtp.office365.com, or your provider\'s host.')
+			. $this->textField('mail_port', 'Port', (string) $settings['port'], 'number',
+				'587 for STARTTLS (usual), 465 for SSL, 25 for plain.')
+			. $this->selectField('mail_security', 'Connection', [
+					OrgMail::SECURITY_STARTTLS => 'STARTTLS (port 587)',
+				OrgMail::SECURITY_SSL      => 'SSL (port 465)',
+				OrgMail::SECURITY_NONE     => 'Plain (port 25, local relay only)',
+				], $settings['security'],
+					'Must match the port: the wrong pair is the most common reason a test fails.')
+			. $this->textField('mail_user', 'Username', $settings['user'], 'text',
+				'Usually the full email address of the sending mailbox. Empty when the relay needs no login.')
+			. $this->textField('mail_pass', 'Password', '', 'password', $passwordHelp)
+				. $this->hiddenField('action', 'mail_save')
+				. $this->hiddenField('return_tab', 'settings')
+				. '<p class="orgsuite-actions">' . $this->submitButton('Save email settings') . '</p>'
+				. '</form>';
+
+			$body .= $this->formStart('orgsuite/console', self::TOKEN)
+				. $this->textField('mail_test_to', 'Send a test to', '', 'email',
+					'Saves nothing - just proves the relay works right now.')
+				. $this->hiddenField('action', 'mail_test')
+				. $this->hiddenField('return_tab', 'settings')
+				. '<p class="orgsuite-actions">' . $this->submitButton('Send test email', 'secondary') . '</p>'
+				. '</form>';
+
+		return $this->card('Email', $body);
+	}
+
+	private function saveMail(array $request): void
+	{
+		$from = $this->cleanText($request, 'mail_from', 191);
+		$host = $this->cleanText($request, 'mail_host', 191);
+		$port = $this->cleanInt($request, 'mail_port', 587);
+		$user = $this->cleanText($request, 'mail_user', 191);
+		// Passwords may contain spaces; read raw and only strip control characters.
+		$password = mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]/u', '', (string) ($request['mail_pass'] ?? '')) ?? ''), 0, 500);
+		$security = $this->cleanText($request, 'mail_security', 16);
+
+		if ($from !== '' && filter_var($from, FILTER_VALIDATE_EMAIL) === false) {
+			DI::sysmsg()->addNotice('That From address does not look like an email address.');
+
+			return;
+		}
+
+		if (($from === '' || $host === '') && !($from === '' && $host === '' && $user === '' && $password === '')) {
+			DI::sysmsg()->addNotice('Fill in both the From address and the mail server, or clear everything to switch email off.');
+
+			return;
+		}
+
+		if ($from === '' && $host === '') {
+			OrgConfig::delete('mail_from');
+			OrgConfig::delete('mail_host');
+			OrgConfig::delete('mail_port');
+			OrgConfig::delete('mail_user');
+			OrgMail::clearPassword();
+			OrgConfig::delete('mail_security');
+			$this->audit('settings.mail.clear', OrgConfig::CATEGORY, 0);
+			DI::sysmsg()->addInfo('Email settings cleared. Approval notices and password resets will not be sent.');
+
+			return;
+		}
+
+		OrgMail::save($from, $host, $port, $user, $password, $security);
+		$this->audit('settings.mail', OrgConfig::CATEGORY, 0, ['host' => $host, 'port' => $port, 'user' => $user !== '' ? '(set)' : '(empty)']);
+		DI::sysmsg()->addInfo('Email settings saved. Send yourself a test below to prove the relay works.');
+	}
+
+	private function sendMailTest(array $request): void
+	{
+		$to = $this->cleanText($request, 'mail_test_to', 191);
+
+		if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
+			DI::sysmsg()->addNotice('Enter the address the test should go to.');
+
+			return;
+		}
+
+		if (!OrgMail::isConfigured()) {
+			DI::sysmsg()->addNotice('Save the relay first, then send a test.');
+
+			return;
+		}
+
+		$error = null;
+
+		if (OrgMail::sendTest($to, $error)) {
+			$this->audit('settings.mail.test', OrgConfig::CATEGORY, 0, ['to' => $to]);
+			DI::sysmsg()->addInfo('Test email sent to ' . $to . '. Check the inbox (and spam) in a minute.');
+
+			return;
+		}
+
+		DI::sysmsg()->addNotice($error ?? 'The test could not be sent.');
 	}
 
 	private function featureFlagsCard(): string

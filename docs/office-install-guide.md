@@ -192,6 +192,22 @@ upload twice and no file to replace. **Remove** puts the built-in mark back.
 Anyone whose position includes **Change organization settings** can do this —
 it does not need the person who set up the server.
 
+### Email (password resets and approval notices)
+
+Out of the box the site cannot send email, which means two things do not work
+until someone fills this in: **password resets** and **"your account is
+approved" notices**. Announcements, dues, documents and the directory all work
+without it.
+
+When the club knows which mailbox the site should send from (a Gmail address,
+an Outlook mailbox, your provider's mail - any mailbox you already own), an
+officer opens the **Console**, **Organization settings**, **Email**, copies in
+the provider's details and clicks **Send test email**. The full table of
+settings for Gmail, Outlook, Yahoo, iCloud and web hosts - including where to
+find the app password each one needs - is in `docs/email-setup.md`. Until that
+test arrives, tell newly approved members yourself that they can sign in, and
+plan for password resets to need a human instead of a link.
+
 ## Living with it
 
 - **After restarting the computer**, open Docker Desktop first and wait for

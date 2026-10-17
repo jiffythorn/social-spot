@@ -64,6 +64,7 @@ for need in \
   "$NAME/packaging/backup.sh" \
   "$NAME/packaging/Backup-Windows.bat" \
   "$NAME/docs/office-install-guide.md" \
+  "$NAME/docs/email-setup.md" \
   "$NAME/docs/mobile-apps.md" \
   "$NAME/docs/packaging.md" \
   "$NAME/packaging/.env.example"; do

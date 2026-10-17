@@ -682,4 +682,43 @@ final class Hooks
 
 		DI::baseUrl()->redirect('orgsuite');
 	}
+
+	/**
+	 * Sends core's account emails through the club's own relay.
+	 *
+	 * Core calls PHP's `mail()` (see `Friendica\Util\Emailer::send()`), which needs
+	 * `/usr/sbin/sendmail`. The image ships no mail transfer agent, so without this
+	 * hook approval notices and password resets never leave. When an officer has
+	 * filled in Organization settings -> Email, deliver there and mark `sent` so core
+	 * skips `mail()`; when nothing is configured, leave `sent` alone so core logs
+	 * the failure instead of us pretending it worked.
+	 */
+	public static function emailerSend(array &$data): void
+	{
+		if (!empty($data['sent'])) {
+			return;
+		}
+
+		if (!OrgMail::isConfigured()) {
+			return;
+		}
+
+		$to = (string) ($data['to'] ?? '');
+		$subject = (string) ($data['subject'] ?? '');
+		$body = (string) ($data['body'] ?? '');
+		$headers = (string) ($data['headers'] ?? '');
+
+		if ($to === '') {
+			return;
+		}
+
+		$error = null;
+
+		if (OrgMail::send($to, $subject, $body, $headers, $error)) {
+			$data['sent'] = true;
+			return;
+		}
+
+		DI::logger()->notice('OrgSuite: relay send failed, falling back to core mailer', ['error' => $error]);
+	}
 }

@@ -71,6 +71,7 @@ const ORGSUITE_HOOK_FILE = 'addon/orgsuite/orgsuite.php';
  * Keeping the list in one place means install and uninstall can never drift apart.
  */
 const ORGSUITE_HOOKS = [
+	'emailer_send'             => 'orgsuite_emailer_send',
 	'route_collection'       => 'orgsuite_route_collection',
 	'nav_info'               => 'orgsuite_nav_info',
 	'head'                   => 'orgsuite_head',
@@ -226,6 +227,13 @@ function orgsuite_addon_admin(&$admin_form): void
  * passed by reference. These wrappers keep the addon's registration table readable and hand
  * the real work to Friendica\Addon\OrgSuite\Hooks.
  */
+
+function orgsuite_emailer_send(&$data): void
+{
+	if (is_array($data)) {
+		Hooks::emailerSend($data);
+	}
+}
 
 function orgsuite_route_collection(&$collector): void
 {

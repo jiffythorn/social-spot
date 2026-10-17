@@ -1085,6 +1085,101 @@ def main() -> int:
     check("https://example.org/our-source" in r.text,
           "the footer offers the configured address instead of the default")
 
+    # --------------------------------- 14b. outgoing email is officer-configurable
+    #
+    # The relay address is only known once a club adopts the instance, so it cannot be
+    # part of the installer: an officer fills it in under Organization settings -> Email.
+    # There is no live SMTP server in CI, so this asserts storage, validation and the
+    # fallback (unconfigured mail must not pretend to send) rather than delivery.
+    step("14b. the email relay is stored, validated and off until configured")
+    r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+    check('name="mail_host"' in r.text and 'name="mail_from"' in r.text,
+          "the settings page carries the Email relay fields")
+    check("not configured" in visible_text(r.text).lower() or "Email is not configured" in r.text,
+          "the console warns that email is not configured yet")
+    # A bad From address must be refused, not stored.
+    r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={
+            "form_security_token": token(r.text),
+            "action": "mail_save",
+            "return_tab": "settings",
+            "mail_from": "not-an-address",
+            "mail_host": "smtp.example.org",
+            "mail_port": "587",
+            "mail_security": "tls",
+            "mail_user": "",
+            "mail_pass": "",
+        },
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(cfg("mail_host") == "",
+          "a bad From address refuses the save", f"mail_host={cfg('mail_host')!r}")
+    # A good save stores host/user without ever echoing the password back.
+    r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={
+            "form_security_token": token(r.text),
+            "action": "mail_save",
+            "return_tab": "settings",
+            "mail_from": "treasurer@example.org",
+            "mail_host": "smtp.example.org",
+            "mail_port": "587",
+            "mail_security": "tls",
+            "mail_user": "treasurer@example.org",
+            "mail_pass": "s3cret-app-password",
+        },
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(cfg("mail_host") == "smtp.example.org" and cfg("mail_from") == "treasurer@example.org",
+          "the relay settings are stored", f"mail_host={cfg('mail_host')!r}")
+    r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+    check("s3cret-app-password" not in r.text,
+          "the stored password is never echoed back to the browser")
+    # Saving with a blank password keeps the stored one.
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={
+            "form_security_token": token(r.text),
+            "action": "mail_save",
+            "return_tab": "settings",
+            "mail_from": "treasurer@example.org",
+            "mail_host": "smtp.example.org",
+            "mail_port": "587",
+            "mail_security": "tls",
+            "mail_user": "treasurer@example.org",
+            "mail_pass": "",
+        },
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(cfg("mail_pass") == "s3cret-app-password",
+          "a blank password keeps the stored secret")
+    # Clearing both From and host switches email back off.
+    r = admin.get(f"{BASE}/orgsuite/console?tab=settings", timeout=20)
+    admin.post(
+        f"{BASE}/orgsuite/console",
+        data={
+            "form_security_token": token(r.text),
+            "action": "mail_save",
+            "return_tab": "settings",
+            "mail_from": "",
+            "mail_host": "",
+            "mail_port": "587",
+            "mail_security": "tls",
+            "mail_user": "",
+            "mail_pass": "",
+        },
+        allow_redirects=True,
+        timeout=20,
+    )
+    check(cfg("mail_host") == "" and cfg("mail_from") == "",
+          "clearing the relay switches email back off")
+
     # ------------------------------------- 15. every tab renders, not just the ones we drove
     #
     # The tabs above are only exercised while hunting for a specific behaviour, so a tab
