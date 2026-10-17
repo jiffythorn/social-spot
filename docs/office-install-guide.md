@@ -57,6 +57,22 @@ about it again, except for starting it (step 6).
 4. Wait until the whale icon at the top of the screen stops animating. Leave
    Docker running.
 
+**On Linux:**
+
+1. Open the software centre (on Ubuntu it is called **Ubuntu Software**) and
+   install **Docker**. If you would rather use a terminal, the packages for
+   Ubuntu and Debian are `sudo apt install docker.io docker-compose-v2`, and
+   for Fedora `sudo dnf install docker docker-compose`.
+2. Start it now, and arrange for it to start whenever the computer is switched
+   on: `sudo systemctl enable --now docker`.
+3. Let your own account talk to it, so the steps below do not each need the
+   word `sudo` in front: `sudo usermod -aG docker "$USER"`, then **sign out and
+   back in** - that is what makes the change take effect.
+
+If Docker was already on this computer, step 2 is usually the only thing
+missing - and if it is missing, the installer now says so before asking you
+anything, rather than failing at the end.
+
 ## Step 2 - download the site software
 
 1. Open the download link your administrator sent you. It is a file named
@@ -81,6 +97,21 @@ type `Terminal`, press Enter). Then:
    and drag that `packaging` folder into the Terminal window. The address
    appears after your `cd `. Now press Enter.
 3. Type `bash install.sh` and press Enter.
+
+**On Linux:** open the Files app, open the `social-spot-...` folder and then the
+`packaging` folder inside it, right-click an empty part of the window and choose
+**Open in Terminal** (on some desktops the entry is called **Open Terminal
+Here**). If there is no such entry, open a Terminal from the applications menu
+instead, then:
+
+1. Type `cd ` (the letters c, d, and a space - don't press Enter yet).
+2. Drag the `packaging` folder onto the Terminal window. The address appears
+   after your `cd `. Now press Enter.
+3. Type `bash install.sh` and press Enter.
+
+Whichever system you are on, `./install.sh` does the same thing if you prefer
+it - the script is marked executable, so double-clicking it in a file manager
+that offers to run scripts also works.
 
 ## Step 4 - answer five questions
 
@@ -110,10 +141,12 @@ shown in [brackets], or type your own answer first.
 
 ## Step 5 - wait, then open the site
 
-The installer downloads everything and starts the site - the first time takes
-roughly five to ten minutes. When it finishes, it prints your site address in
-green. Open that address in your browser and sign in with the administrator
-account. You should see your organization's home page.
+The installer downloads everything, builds the server, and starts the site.
+The first time takes a while - roughly fifteen to forty-five minutes depending
+on the computer, most of it the one-time build of the server's own components.
+Later runs reuse that work and take a minute or two. When it finishes, it prints
+your site address in green. Open that address in your browser and sign in with
+the administrator account. You should see your organization's home page.
 
 Click **Console** in the navigation. That is the Officer console - the one
 place where membership, dues, documents, announcements, and settings live.

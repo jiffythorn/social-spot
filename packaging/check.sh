@@ -119,6 +119,115 @@ for var in BASE_URL HTTP_PORT ORG_NAME ORG_PROFILE ADMIN_NICK ADMIN_PASS ADMIN_M
 done
 pass "both installers cover all eleven .env variables"
 
+# Every shell script here carries a shebang, so the executable bit is what makes
+# `./install.sh` work and what lets a Linux file manager offer to run it at all. The
+# Dockerfile sets the bit on the entrypoint itself; these are for the person
+# installing, who otherwise meets "Permission denied" on a file they double-clicked.
+for script in install.sh backup.sh check.sh make-dist.sh; do
+  if [[ -x "$DIR/$script" ]]; then
+    pass "$script is executable"
+  else
+    fail "$script is not executable (chmod +x packaging/$script)"
+  fi
+done
+
+####################################################### image and entrypoint agree
+#
+# The Dockerfile's CMD is the entrypoint's first argument, and the entrypoint only
+# recognises its own modes. These two drifted apart: the image said
+# `apache2-foreground`, the entrypoint wanted `app`, so every install provisioned the
+# database and then died in a restart loop with no web server - and the person
+# installing saw only "the site is not answering yet" three minutes later. The
+# mismatch is a one-line fact about two files, so it is checked here.
+printf '\033[36m== the image and its entrypoint agree\033[0m\n'
+
+docker_cmd="$(grep -E '^CMD ' "$DIR/Dockerfile" | head -1 | tr -d '[]",' | awk '{print $2}')"
+if [[ "$docker_cmd" == "app" || "$docker_cmd" == "worker" ]]; then
+  pass "the Dockerfile's CMD ('$docker_cmd') is a mode the entrypoint recognises"
+else
+  fail "Dockerfile CMD is '$docker_cmd' but docker-entrypoint.sh accepts only app or worker"
+fi
+
+grep -qE '^\s*app\|apache2-foreground\)' "$DIR/docker-entrypoint.sh" \
+  && pass "the entrypoint also accepts the bare apache2-foreground, so older images still start" \
+  || fail "the entrypoint rejects the bare apache2-foreground command"
+
+################################################################## answers round-trip
+#
+# The installer used to print `VAR=value` for the caller to eval. Every organization
+# name with a space in it was truncated at the first space and the remainder run as a
+# command - "Sunset Hills HOA" executed `Hills` - and a name containing a semicolon or
+# a password containing $(...) was executed outright. Nothing caught it because no
+# test had ever typed a realistic name, and the failure looked like a missing command
+# rather than a broken value.
+#
+# These run the REAL writer and reader out of install.sh (via the INSTALL_LIB_ONLY
+# hook) against values a person actually types, and assert they come back unchanged.
+printf '\033[36m== the answers file survives real names\033[0m\n'
+
+daemon_line="$(grep -n 'docker info >/dev/null' "$DIR/install.sh" | head -1 | cut -d: -f1)"
+# The full prompt, not just "a few questions": the file's own header comment uses
+# that phrase too, and it sits above the daemon check, so the loose pattern matched
+# the documentation instead of the prompt and reported a failure that was not there.
+questions_line="$(grep -n 'a few questions (Enter' "$DIR/install.sh" | head -1 | cut -d: -f1)"
+if [[ -n "$daemon_line" && -n "$questions_line" && "$daemon_line" -lt "$questions_line" ]]; then
+  pass "the Docker daemon is checked before the questions are asked"
+else
+  fail "install.sh asks its questions before checking the daemon is running"
+fi
+
+if grep -qE 'eval "\$\(ask|source "\$ENV_FILE"' "$DIR/install.sh"; then
+  fail "install.sh evaluates its answers again (eval/source on typed input)"
+else
+  pass "install.sh neither evals nor sources the answers it collected"
+fi
+
+roundtrip="$(mktemp -d)"
+cat > "$roundtrip/answers.sh" <<'ROUNDTRIP'
+set -uo pipefail
+
+source "$1"
+
+# Exactly the shapes a person types: a multi-word name with an apostrophe in it, and
+# a password made of shell metacharacters.
+name="Sunset Hills HOA - O'Brien's"
+secret='p@ss word$(id) `whoami` "quoted" & more'
+BASE_URL="http://127.0.0.1:8099"
+HTTP_PORT="8099"
+ORG_NAME="$name"
+ORG_PROFILE="hoa"
+ADMIN_NICK="admin"
+ADMIN_PASS="$secret"
+ADMIN_MAIL="admin@example.com"
+DB_NAME="socialspot"
+DB_USER="socialspot"
+DB_PASSWORD="abc123"
+DB_ROOT_PASSWORD="def456"
+
+file="$(mktemp)"
+write_env "$file"
+
+ORG_NAME=""
+ADMIN_PASS=""
+DB_PASSWORD=""
+load_env "$file"
+
+[[ "$ORG_NAME" == "$name" ]]     || { echo "ORG_NAME came back as [$ORG_NAME]"; exit 1; }
+[[ "$ADMIN_PASS" == "$secret" ]] || { echo "ADMIN_PASS came back as [$ADMIN_PASS]"; exit 1; }
+[[ "$DB_PASSWORD" == "abc123" ]] || { echo "DB_PASSWORD came back as [$DB_PASSWORD]"; exit 1; }
+[[ "$HTTP_PORT" == "8099" ]]     || { echo "HTTP_PORT came back as [$HTTP_PORT]"; exit 1; }
+[[ "$BASE_URL" == "http://127.0.0.1:8099" ]] || { echo "BASE_URL came back as [$BASE_URL]"; exit 1; }
+
+rm -f "$file"
+ROUNDTRIP
+
+if roundtrip_out="$(INSTALL_LIB_ONLY=1 bash "$roundtrip/answers.sh" "$DIR/install.sh" 2>&1)"; then
+  pass "a name with spaces, an apostrophe and shell metacharacters survives intact"
+else
+  fail "the answers file corrupts typed values: $roundtrip_out"
+fi
+rm -rf "$roundtrip"
+
 if [[ "$FAILED" -eq 0 ]]; then
   printf '\033[32mpackaging checks passed (syntax and consistency only - see the header)\033[0m\n'
 else

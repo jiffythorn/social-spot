@@ -23,6 +23,79 @@ say()  { printf '\033[36m[install]\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m[install]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31m[install]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# ask <VAR> <prompt> <default> — prints the answer itself, so callers assign it.
+#
+# It used to print `VAR=value` for the caller to eval, which silently dropped
+# everything after the first word of an organization name and ran the rest as a
+# command: "Sunset Hills HOA" became ORG_NAME=Sunset plus `Hills: command not
+# found`, and a name containing a semicolon was executed. Found by running this
+# installer on a name with a space in it; packaging/check.sh now proves the round
+# trip so it cannot come back.
+ask() {
+  local var="$1" prompt="$2" default="$3" current
+  current="${!var:-}"
+  if [[ -n "$current" ]]; then printf '%s\n' "$current"; return 0; fi
+  printf '%s [%s]: ' "$prompt" "$default" >&2
+  read -r current || true
+  printf '%s\n' "${current:-$default}"
+}
+
+# Portable secret generation: openssl where present, /dev/urandom otherwise,
+# alphanumerics only so the value needs no quoting in .env or in SQL.
+rand_secret() {
+  if command -v openssl >/dev/null; then
+    openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24
+  else
+    tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24
+  fi
+  printf '\n'
+}
+
+# load_env <path> — reads VAR=value into the shell WITHOUT executing the file.
+#
+# `source` runs whatever a value happens to contain, and the values come from
+# human typing: an organization called "O'Brien's HOA", or a password with a
+# backtick or a $( in it. The file itself stays unquoted because `docker compose`
+# reads the same file and wants plain values.
+load_env() {
+  local path="$1" line key value
+
+  [[ -f "$path" ]] || return 0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^[[:space:]]*# || "$line" != *=* ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key//[[:space:]]/}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    printf -v "$key" '%s' "$value"
+  done < "$path"
+}
+
+write_env() { # write_env <path>
+  {
+    printf '# Written by packaging/install.sh - passwords live here, never commit this file.\n'
+    printf 'BASE_URL=%s\n' "$BASE_URL"
+    printf 'HTTP_PORT=%s\n' "$HTTP_PORT"
+    printf 'ORG_NAME=%s\n' "$ORG_NAME"
+    printf 'ORG_PROFILE=%s\n' "$ORG_PROFILE"
+    printf 'ADMIN_NICK=%s\n' "$ADMIN_NICK"
+    printf 'ADMIN_PASS=%s\n' "$ADMIN_PASS"
+    printf 'ADMIN_MAIL=%s\n' "$ADMIN_MAIL"
+    printf 'DB_NAME=%s\n' "$DB_NAME"
+    printf 'DB_USER=%s\n' "$DB_USER"
+    printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
+    printf 'DB_ROOT_PASSWORD=%s\n' "$DB_ROOT_PASSWORD"
+  } > "$1"
+  chmod 600 "$1"
+}
+
+# packaging/check.sh sources this file with INSTALL_LIB_ONLY=1 to test the writer
+# and the reader above, which needs no Docker daemon.
+if [[ -n "${INSTALL_LIB_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
+
 command -v docker >/dev/null || die "Docker is not installed. Install Docker Desktop
   (https://www.docker.com/products/docker-desktop/) or your distro's docker
   package, then run this again."
@@ -30,32 +103,23 @@ docker compose version >/dev/null 2>&1 || die "Docker is here but the Compose pl
   is not ('docker compose version' failed). Docker Desktop ships it; on Linux
   install the docker-compose-plugin package."
 
+# Checked BEFORE the questions are asked, so somebody who installed Docker but never
+# started it is told exactly that, instead of answering five questions and then
+# reading a raw daemon error. install.ps1 has always checked this; install.sh did not.
+docker info >/dev/null 2>&1 || die "Docker is installed but not running, or this
+  user may not talk to it. Start it first:
+    Linux:  sudo systemctl enable --now docker
+    macOS:  open Docker Desktop and wait for the whale to stop animating."
+
+command -v curl >/dev/null || die "curl is not installed, and this installer uses it
+  to wait for the site to come up. Install it (usually one of: apt install curl,
+  dnf install curl, zypper install curl) and run this again."
+
 # An existing answers file means "start/upgrade", not "ask everything again".
 if [[ -f "$ENV_FILE" && "$FORCE" -eq 0 ]]; then
   say "using the existing answers in packaging/.env (pass --force to redo them)"
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
+  load_env "$ENV_FILE"
 else
-  ask() { # ask <VAR> <prompt> <default> — keeps a preset environment value untouched
-    local var="$1" prompt="$2" default="$3" current
-    current="${!var:-}"
-    [[ -n "$current" ]] && { printf '%s=%s\n' "$var" "$current"; return 0; }
-    printf '%s [%s]: ' "$prompt" "$default" >&2
-    read -r current || true
-    printf '%s=%s\n' "$var" "${current:-$default}"
-  }
-
-  # Portable secret generation: openssl where present, /dev/urandom otherwise,
-  # alphanumerics only so the value needs no quoting in .env or in SQL.
-  rand_secret() {
-    if command -v openssl >/dev/null; then
-      openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24
-    else
-      tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24
-    fi
-    printf '\n'
-  }
-
   say "a few questions (Enter accepts the default shown in brackets)"
   HTTP_PORT="${HTTP_PORT:-8080}"
   read -r -p "Port on this machine that serves the site [$HTTP_PORT]: " ans || true
@@ -70,7 +134,7 @@ else
     cookies will misbehave until they agree."
   fi
 
-  eval "$(ask ORG_NAME 'Organization name' 'Social Spot')"
+  ORG_NAME="$(ask ORG_NAME 'Organization name' 'Social Spot')"
 
   ORG_PROFILE="${ORG_PROFILE:-hoa}"
   printf 'Kind of organization (this only sets the starting feature set;\n' >&2
@@ -86,8 +150,8 @@ else
     *) warn "not a choice; keeping '$ORG_PROFILE'" ;;
   esac
 
-  eval "$(ask ADMIN_NICK 'Administrator account name' 'admin')"
-  eval "$(ask ADMIN_MAIL 'Administrator email' 'admin@example.com')"
+  ADMIN_NICK="$(ask ADMIN_NICK 'Administrator account name' 'admin')"
+  ADMIN_MAIL="$(ask ADMIN_MAIL 'Administrator email' 'admin@example.com')"
 
   if [[ -z "${ADMIN_PASS:-}" ]]; then
     printf 'Administrator password (empty generates a safe one): ' >&2
@@ -101,21 +165,7 @@ else
   DB_PASSWORD="$(rand_secret)"
   DB_ROOT_PASSWORD="$(rand_secret)"
 
-  {
-    printf '# Written by packaging/install.sh - passwords live here, never commit this file.\n'
-    printf 'BASE_URL=%s\n' "$BASE_URL"
-    printf 'HTTP_PORT=%s\n' "$HTTP_PORT"
-    printf 'ORG_NAME=%s\n' "$ORG_NAME"
-    printf 'ORG_PROFILE=%s\n' "$ORG_PROFILE"
-    printf 'ADMIN_NICK=%s\n' "$ADMIN_NICK"
-    printf 'ADMIN_PASS=%s\n' "$ADMIN_PASS"
-    printf 'ADMIN_MAIL=%s\n' "$ADMIN_MAIL"
-    printf 'DB_NAME=%s\n' "$DB_NAME"
-    printf 'DB_USER=%s\n' "$DB_USER"
-    printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
-    printf 'DB_ROOT_PASSWORD=%s\n' "$DB_ROOT_PASSWORD"
-  } > "$ENV_FILE"
-  chmod 600 "$ENV_FILE"
+  write_env "$ENV_FILE"
   say "answers written to packaging/.env"
 fi
 
@@ -139,8 +189,7 @@ done
 [[ "$ready" == "1" ]] || die "the site is not answering yet. It may still be on
   first-boot provisioning - follow it with:  docker compose -f packaging/compose.yaml logs -f app"
 
-# shellcheck disable=SC1090
-source "$ENV_FILE"
+load_env "$ENV_FILE"
 printf '\n\033[32mYour server is up at %s\033[0m\n' "$BASE_URL"
 printf 'Sign in as \033[1m%s\033[0m with the administrator password' "$ADMIN_NICK"
 [[ "$FORCE" -eq 1 ]] && printf ' shown when the answers were written'

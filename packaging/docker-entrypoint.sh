@@ -2,9 +2,10 @@
 #
 # Boots (and on first boot, provisions) the Social Spot server inside its container.
 #
-# Invoked as the image ENTRYPOINT. With no arguments it provisions and then starts
-# Apache; with `worker` it provisions and then runs the background-job daemon
-# (`bin/console.php daemon` - the non-deprecated worker entry point since core 2026.01).
+# Invoked as the image ENTRYPOINT. With no arguments (or `app`) it provisions and then
+# starts Apache; with `worker` it provisions and then runs the background-job daemon in
+# the foreground (`bin/console.php daemon start -f` - the non-deprecated worker entry
+# point since core 2026.01).
 #
 # Design rules, all learned from tools/dev/instance.sh:
 #   * every start is safe to repeat - restarts and image upgrades re-run this script;
@@ -76,7 +77,11 @@ write_local_config() {
       printf "\t\t'register_policy' => \\Friendica\\Module\\Register::APPROVE,\n"
     fi
 
-    printf "\t],\n\n\t'system' => [\n\t\t'default_timezone' => 'UTC',\n\t\t'language'         => 'en',\n\t\t'url'              => '%s',\n\t\t'loglevel'         => 'NOTICE',\n\t\t'debugging'        => false,\n\t],\n];\n" "$(esc "$BASE_URL")"
+    # The pidfile is not optional: core's daemon refuses to start without it ("Please
+    # set system.pidfile in config/local.config.php"), so the worker container exited
+    # cleanly on every boot and was restarted for ever, doing no background work at all.
+    # Each container has its own filesystem, so this path holds the worker's own pid.
+    printf "\t],\n\n\t'system' => [\n\t\t'default_timezone' => 'UTC',\n\t\t'language'         => 'en',\n\t\t'url'              => '%s',\n\t\t'loglevel'         => 'NOTICE',\n\t\t'debugging'        => false,\n\t\t'pidfile'          => '/var/www/friendica/daemon.pid',\n\t],\n];\n" "$(esc "$BASE_URL")"
   } > "$CORE/config/local.config.php"
 
   # Friendica decides "installed" by the presence of exactly this path, so it must
@@ -172,10 +177,23 @@ provision() {
 
 mode="${1:-app}"
 
+# The image's CMD was the bare Apache command for a while, which the case below did
+# not recognise: the container provisioned the database, then died, then restart-looped
+# - and a fresh install ended with the installer timing out against a site that had no
+# web server running at all. Normalising it here keeps an older image, or a container
+# somebody runs by hand with that argument, working; the Dockerfile now says `app`.
+case "$mode" in
+  app|apache2-foreground) mode="app" ;;
+  worker)                 ;;
+  *) die "unknown mode '$mode' (want 'app' or 'worker')" ;;
+esac
+
 provision
 
 case "$mode" in
-  worker) exec gosu www-data php bin/console.php daemon ;;
+  # `start -f` rather than the bare command: without --foreground the daemon forks and
+  # the parent exits 0, which a container reads as "the process finished" and restarts
+  # for ever - so the worker looked busy while doing nothing.
+  worker) exec gosu www-data php bin/console.php daemon start -f ;;
   app)    exec apache2-foreground ;;
-  *)      die "unknown mode '$mode' (want 'app' or 'worker')" ;;
 esac
